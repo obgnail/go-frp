@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/connection"
-	"github.com/obgnail/go-frp/context"
 	"log"
 	"sync"
 )
@@ -43,40 +42,42 @@ func NewProxyServer(name, bindAddr string, listenPort int64) (*ProxyServer, erro
 	return ps, nil
 }
 
-func (p *ProxyServer) Lock() {
-	p.mutex.Lock()
+func (s *ProxyServer) Lock() {
+	s.mutex.Lock()
 }
 
-func (p *ProxyServer) Unlock() {
-	p.mutex.Unlock()
+func (s *ProxyServer) Unlock() {
+	s.mutex.Unlock()
 }
 
 // 所有连接发送的数据都会到handler函数处理
-func (p *ProxyServer) Handler(ctx *context.Context) {
+func (s *ProxyServer) Handler(ctx *connection.Context) {
+	req := ctx.GetRequest()
+	//conn := ctx.GetConn()
+	if ctx.IsHeartBeat() {
+		log.Printf("ProxyName [%s], get heartbeat\n", req.ProxyName)
+		resp := connection.NewHeartbeatResponse(req.ProxyName)
+		ctx.SetResponse(resp)
+	} else if ctx.IsEstablishConnection() {
 
+	} else {
+
+	}
 }
 
-func (p *ProxyServer) Process() {
-	go func() {
-		for {
-			conn, err := p.listener.GetConn()
-			if err != nil {
-				fmt.Println(err)
-				continue
-			}
-			conn.Process(p.Handler)
+func (s *ProxyServer) Server() {
+	if s == nil {
+		log.Fatal(fmt.Errorf("proxy server is nil"))
+	}
+	if s.listener == nil {
+		log.Fatal(fmt.Errorf("proxy server has no listener"))
+	}
+	for {
+		conn, err := s.listener.GetConn()
+		if err != nil {
+			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
+			continue
 		}
-	}()
-}
-
-func (p *ProxyServer) Server() {
-	if p == nil {
-		err := fmt.Errorf("proxy server is nil")
-		log.Fatal(err)
+		go conn.Process(s.Handler)
 	}
-	if p.listener == nil {
-		err := fmt.Errorf("proxy server has no listener")
-		log.Fatal(err)
-	}
-	p.Process()
 }

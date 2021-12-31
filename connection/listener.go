@@ -2,6 +2,7 @@ package connection
 
 import (
 	"fmt"
+	"github.com/juju/errors"
 	"log"
 	"net"
 )
@@ -13,32 +14,34 @@ type Listener struct {
 	closeFlag   bool
 }
 
-func (l *Listener) StartListen() {
-	go func() {
-		if l.tcpListener == nil {
-			err := fmt.Errorf("has no lisener")
-			log.Fatal(err)
-		}
-		for {
-			conn, err := l.tcpListener.AcceptTCP()
-			if err != nil {
-				if l.closeFlag {
-					return
-				}
-				continue
-			}
+func (l *Listener) Close() {
+	l.closeFlag = true
+}
 
-			c := NewConn(conn)
-			l.connChan <- c
+func (l *Listener) StartListen() {
+	if l.tcpListener == nil {
+		err := fmt.Errorf("has no lisener")
+		log.Fatal(err)
+	}
+	for {
+		conn, err := l.tcpListener.AcceptTCP()
+		if err != nil {
+			if l.closeFlag {
+				return
+			}
+			continue
 		}
-	}()
+
+		c := NewConn(conn)
+		l.connChan <- c
+	}
 }
 
 func NewListener(bindAddr string, bindPort int64) (listener *Listener, err error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", fmt.Sprintf("%s:%d", bindAddr, bindPort))
 	tcpListener, err := net.ListenTCP("tcp", tcpAddr)
 	if err != nil {
-		return listener, err
+		return listener, errors.Trace(err)
 	}
 	listener = &Listener{
 		addr:        tcpListener.Addr(),

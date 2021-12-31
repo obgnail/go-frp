@@ -4,19 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"github.com/juju/errors"
 	"io"
 	"log"
 	"net"
-
-	"github.com/juju/errors"
-	"github.com/obgnail/go-frp/context"
 )
 
 const (
-	BufferRequestStartFlag  = '1'
-	BufferResponseStartFlag = '2'
-	BufferEndFlag           = '\n'
+	BufferEndFlag = '\n'
 )
 
 type Conn struct {
@@ -24,40 +19,54 @@ type Conn struct {
 	Reader    *bufio.Reader
 	closeFlag bool
 
-	ContextChan chan *context.Context
+	acceptChan chan *Context
+	writeChan  chan *Context
 }
 
 func NewConn(tcpConn *net.TCPConn) *Conn {
 	c := &Conn{
-		TcpConn:     tcpConn,
-		closeFlag:   false,
-		Reader:      bufio.NewReader(tcpConn),
-		ContextChan: make(chan *context.Context, 1024),
+		TcpConn:    tcpConn,
+		closeFlag:  false,
+		Reader:     bufio.NewReader(tcpConn),
+		acceptChan: make(chan *Context, 1),
+		writeChan:  make(chan *Context, 1),
 	}
-	//go c.accept()
+	go c.write()
+	go c.accept()
 	return c
 }
 
-//func (c *Conn) accept() {
-//	for {
-//		ctx := &context.Context{}
-//		req, err := c.Read()
-//		if err != nil {
-//			err = errors.Trace(err)
-//			fmt.Println("[WARN] accept msg err:", err)
-//			continue
-//		}
-//		ctx.SetRequest(req)
-//		c.ContextChan <- ctx
-//	}
-//}
+func (c *Conn) Close() {
+	c.closeFlag = true
+}
 
-func (c *Conn) read() (buff []byte, err error) {
-	buff, err = c.Reader.ReadBytes(BufferEndFlag)
-	if err == io.EOF {
-		c.closeFlag = true
+func (c *Conn) write() {
+	for {
+		ctx, ok := <-c.writeChan
+		if !ok {
+			log.Println("[WARN] write conn had closed")
+			return
+		}
+
+		if resp := ctx.GetResponse(); resp != nil {
+			err := c.WriteResponse(resp)
+			if err != nil {
+				log.Println("[WARN] write response err:", errors.Trace(err))
+			}
+		}
 	}
-	return buff, err
+}
+
+func (c *Conn) accept() {
+	for {
+		req, err := c.ReadRequest()
+		if err != nil {
+			log.Println("[WARN] accept request msg err:", errors.Trace(err))
+			continue
+		}
+		ctx := NewContext(req, nil, c)
+		c.acceptChan <- ctx
+	}
 }
 
 func (c *Conn) Write(buff []byte) (err error) {
@@ -71,25 +80,42 @@ func (c *Conn) Write(buff []byte) (err error) {
 	return
 }
 
-func (c *Conn) WriteRequest(request *context.Request) (err error) {
-
-
-
-	return
-}
-
-func (c *Conn) ReadRequest() (request *context.Request, err error) {
-	buff, err := c.read()
-}
-
-func (c *Conn) Read() (request *context.Request, err error) {
-	reqBytes, err := c.read()
+func (c *Conn) WriteRequest(request *Request) (err error) {
+	reqBytes, _ := json.Marshal(request)
+	err = c.Write(reqBytes)
 	if err != nil {
 		err = errors.Trace(err)
 		return
 	}
+	return
+}
 
-	request = &context.Request{}
+func (c *Conn) WriteResponse(response *Response) (err error) {
+	respBytes, _ := json.Marshal(response)
+	err = c.Write(respBytes)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+	return
+}
+
+func (c *Conn) Read() (buff []byte, err error) {
+	buff, err = c.Reader.ReadBytes(BufferEndFlag)
+	if err == io.EOF {
+		c.Close()
+		close(c.writeChan)
+		close(c.acceptChan)
+	}
+	return buff, err
+}
+
+func (c *Conn) ReadRequest() (request *Request, err error) {
+	reqBytes, err := c.Read()
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
 	if err = json.Unmarshal(reqBytes, request); err != nil {
 		err = errors.Trace(err)
 		return
@@ -97,37 +123,27 @@ func (c *Conn) Read() (request *context.Request, err error) {
 	return
 }
 
-func (c *Conn) Send(req *context.Request) (err error) {
-	if req == nil {
-		err = fmt.Errorf("has no req")
-		return
-	}
-	ctx := &context.Context{}
-	ctx.SetRequest(req)
-	err = c.Write(req)
+func (c *Conn) ReadResponse() (response *Response, err error) {
+	respBytes, err := c.Read()
 	if err != nil {
 		err = errors.Trace(err)
 		return
 	}
-
-	resp, err := c.Read()
-	if err != nil {
+	if err = json.Unmarshal(respBytes, response); err != nil {
 		err = errors.Trace(err)
 		return
 	}
-	ctx.SetResponse(resp)
 	return
 }
 
-func (c *Conn) Process(handler func(ctx *context.Context)) {
-	go func() {
-		for {
-			ctx, ok := <-c.ContextChan
-			if !ok {
-				log.Println("Conn had closed")
-				return
-			}
-			handler(ctx)
+func (c *Conn) Process(handler func(ctx *Context)) {
+	for {
+		ctx, ok := <-c.acceptChan
+		if !ok {
+			log.Println("accept conn had closed")
+			return
 		}
-	}()
+		handler(ctx)
+		c.writeChan <- ctx
+	}
 }
