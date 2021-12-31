@@ -3,10 +3,10 @@ package frps
 import (
 	"fmt"
 	"github.com/juju/errors"
+	"github.com/obgnail/go-frp/connection"
+	"github.com/obgnail/go-frp/context"
 	"log"
 	"sync"
-
-	"github.com/obgnail/go-frp/connection"
 )
 
 type ServerStatus int
@@ -43,6 +43,35 @@ func NewProxyServer(name, bindAddr string, listenPort int64) (*ProxyServer, erro
 	return ps, nil
 }
 
+func (p *ProxyServer) Lock() {
+	p.mutex.Lock()
+}
+
+func (p *ProxyServer) Unlock() {
+	p.mutex.Unlock()
+}
+
+func (p *ProxyServer) Handler(ctx *context.Context) {
+
+}
+
+func (p *ProxyServer) Listen() {
+	p.listener.StartListen()
+}
+
+func (p *ProxyServer) Process() {
+	go func() {
+		for {
+			conn, err := p.listener.GetConn()
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+			conn.Process(p.Handler)
+		}
+	}()
+}
+
 func (p *ProxyServer) Server() {
 	if p == nil {
 		err := fmt.Errorf("proxy server is nil")
@@ -52,13 +81,6 @@ func (p *ProxyServer) Server() {
 		err := fmt.Errorf("proxy server has no listener")
 		log.Fatal(err)
 	}
-	p.listener.StartListen()
-}
-
-func (p *ProxyServer) Lock() {
-	p.mutex.Lock()
-}
-
-func (p *ProxyServer) Unlock() {
-	p.mutex.Unlock()
+	p.Listen()
+	p.Process()
 }

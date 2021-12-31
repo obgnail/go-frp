@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 
 	"github.com/juju/errors"
@@ -20,13 +21,16 @@ type Conn struct {
 	TcpConn   *net.TCPConn
 	Reader    *bufio.Reader
 	closeFlag bool
+
+	ContextChan chan *context.Context
 }
 
 func NewConn(tcpConn *net.TCPConn) *Conn {
 	c := &Conn{
-		TcpConn:   tcpConn,
-		closeFlag: false,
-		Reader:    bufio.NewReader(tcpConn),
+		TcpConn:     tcpConn,
+		closeFlag:   false,
+		Reader:      bufio.NewReader(tcpConn),
+		ContextChan: make(chan *context.Context, 1024),
 	}
 	return c
 }
@@ -66,12 +70,13 @@ func (c *Conn) Read() (response *context.Response, err error) {
 	return
 }
 
-func (c *Conn) Process(ctx *context.Context) (err error) {
-	req := ctx.GetRequest()
+func (c *Conn) Send(req *context.Request) (err error) {
 	if req == nil {
 		err = fmt.Errorf("has no req")
 		return
 	}
+	ctx := &context.Context{}
+	ctx.SetRequest(req)
 	err = c.Write(req)
 	if err != nil {
 		err = errors.Trace(err)
@@ -84,5 +89,25 @@ func (c *Conn) Process(ctx *context.Context) (err error) {
 		return
 	}
 	ctx.SetResponse(resp)
+	c.pushContext(ctx)
 	return
+}
+
+func (c *Conn) pushContext(ctx *context.Context) {
+	go func() {
+		c.ContextChan <- ctx
+	}()
+}
+
+func (c *Conn) Process(handler func(ctx *context.Context)) {
+	go func() {
+		for {
+			ctx, ok := <-c.ContextChan
+			if !ok {
+				log.Println("Conn had closed")
+				return
+			}
+			handler(ctx)
+		}
+	}()
 }
