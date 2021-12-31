@@ -22,13 +22,13 @@ type ProxyServer struct {
 	ListenPort int64
 	Status     ServerStatus
 
-	listener       *connection.Listener  // accept new connection from remote users
-	clientConnChan chan *connection.Conn // get client conns from control goroutine
+	listener       *connection.Listener
+	clientConnChan chan *connection.Conn
 	mutex          sync.Mutex
 }
 
 func NewProxyServer(name, bindAddr string, listenPort int64) (*ProxyServer, error) {
-	tcpListener, err := connection.NewTCPListener(bindAddr, listenPort)
+	tcpListener, err := connection.NewListener(bindAddr, listenPort)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -51,12 +51,9 @@ func (p *ProxyServer) Unlock() {
 	p.mutex.Unlock()
 }
 
+// 所有连接发送的数据都会到handler函数处理
 func (p *ProxyServer) Handler(ctx *context.Context) {
 
-}
-
-func (p *ProxyServer) Listen() {
-	p.listener.StartListen()
 }
 
 func (p *ProxyServer) Process() {
@@ -81,6 +78,5 @@ func (p *ProxyServer) Server() {
 		err := fmt.Errorf("proxy server has no listener")
 		log.Fatal(err)
 	}
-	p.Listen()
 	p.Process()
 }
