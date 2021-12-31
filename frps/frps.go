@@ -1,7 +1,9 @@
 package frps
 
 import (
-	"container/list"
+	"fmt"
+	"github.com/juju/errors"
+	"log"
 	"sync"
 
 	"github.com/obgnail/go-frp/connection"
@@ -20,29 +22,37 @@ type ProxyServer struct {
 	ListenPort int64
 	Status     ServerStatus
 
-	listener         *connection.Listener  // accept new connection from remote users
-	waitUserConnChan chan struct{}         // every time accept a new user conn, put struct{} to the channel
-	clientConnChan   chan *connection.Conn // get client conns from control goroutine
-	userConnList     *list.List            // store user conns
-	mutex            sync.Mutex
+	listener       *connection.Listener  // accept new connection from remote users
+	clientConnChan chan *connection.Conn // get client conns from control goroutine
+	mutex          sync.Mutex
 }
 
 func NewProxyServer(name, bindAddr string, listenPort int64) (*ProxyServer, error) {
 	tcpListener, err := connection.NewTCPListener(bindAddr, listenPort)
 	if err != nil {
-		return nil, err
+		return nil, errors.Trace(err)
 	}
 	ps := &ProxyServer{
-		Name:             name,
-		BindAddr:         bindAddr,
-		ListenPort:       listenPort,
-		Status:           Idle,
-		listener:         tcpListener,
-		waitUserConnChan: make(chan struct{}),
-		clientConnChan:   make(chan *connection.Conn),
-		userConnList:     list.New(),
+		Name:           name,
+		BindAddr:       bindAddr,
+		ListenPort:     listenPort,
+		Status:         Idle,
+		listener:       tcpListener,
+		clientConnChan: make(chan *connection.Conn),
 	}
 	return ps, nil
+}
+
+func (p *ProxyServer) Server() {
+	if p == nil {
+		err := fmt.Errorf("proxy server is nil")
+		log.Fatal(err)
+	}
+	if p.listener == nil {
+		err := fmt.Errorf("proxy server has no listener")
+		log.Fatal(err)
+	}
+	p.listener.StartListen()
 }
 
 func (p *ProxyServer) Lock() {

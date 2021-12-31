@@ -1,14 +1,22 @@
 package context
 
-type Context interface {
-	Process()
+type Context struct {
+	req  *Request
+	resp *Response
 }
 
-type EstablishConnectionContext struct {
-	req  *EstablishConnectionRequest
-	resp *EstablishConnectionResponse
+func (c *Context) GetRequest() *Request {
+	return c.req
 }
 
-func (c *EstablishConnectionContext) Process() {
+func (c *Context) GetResponse() *Response {
+	return c.resp
+}
 
+func (c *Context) SetRequest(req *Request) {
+	c.req = req
+}
+
+func (c *Context) SetResponse(resp *Response) {
+	c.resp = resp
 }
