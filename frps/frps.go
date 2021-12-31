@@ -78,6 +78,6 @@ func (s *ProxyServer) Server() {
 			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
 			continue
 		}
-		go conn.Process(s.Handler)
+		go conn.ProcessOutsideRequest(s.Handler)
 	}
 }

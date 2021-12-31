@@ -19,32 +19,48 @@ type Conn struct {
 	Reader    *bufio.Reader
 	closeFlag bool
 
-	acceptChan chan *Context
-	writeChan  chan *Context
+	outsideRequestChan  chan *Context
+	outsideResponseChan chan *Context
+	insideRequestChan   chan *Context
+	insideResponseChan  chan *Context
 }
 
 func NewConn(tcpConn *net.TCPConn) *Conn {
 	c := &Conn{
-		TcpConn:    tcpConn,
-		closeFlag:  false,
-		Reader:     bufio.NewReader(tcpConn),
-		acceptChan: make(chan *Context, 1),
-		writeChan:  make(chan *Context, 1),
+		TcpConn:             tcpConn,
+		closeFlag:           false,
+		Reader:              bufio.NewReader(tcpConn),
+		outsideRequestChan:  make(chan *Context, 1),
+		outsideResponseChan: make(chan *Context, 1),
+		insideRequestChan:   make(chan *Context, 1),
+		insideResponseChan:  make(chan *Context, 1),
 	}
-	go c.write()
-	go c.accept()
+	go c.getOutsideRequest()
+	go c.sendOutsideResponse()
+	go c.sendInsideRequest()
+	go c.getInsideResponse()
 	return c
 }
 
-func (c *Conn) Close() {
-	c.closeFlag = true
+// 获取从外部主动发来的数据
+func (c *Conn) getOutsideRequest() {
+	for {
+		req, err := c.ReadRequest()
+		if err != nil {
+			log.Println("[WARN] get outside request msg err:", errors.Trace(err))
+			continue
+		}
+		ctx := NewContext(req, nil, c)
+		c.outsideRequestChan <- ctx
+	}
 }
 
-func (c *Conn) write() {
+// 响应从外部主动发来的数据
+func (c *Conn) sendOutsideResponse() {
 	for {
-		ctx, ok := <-c.writeChan
+		ctx, ok := <-c.outsideResponseChan
 		if !ok {
-			log.Println("[WARN] write conn had closed")
+			log.Println("[WARN] send outside response conn had closed")
 			return
 		}
 
@@ -57,16 +73,38 @@ func (c *Conn) write() {
 	}
 }
 
-func (c *Conn) accept() {
+// 主动向外部发送数据后，获取返回数据
+func (c *Conn) getInsideResponse() {
 	for {
-		req, err := c.ReadRequest()
+		resp, err := c.ReadResponse()
 		if err != nil {
-			log.Println("[WARN] accept request msg err:", errors.Trace(err))
+			log.Println("[WARN] get outside response msg err:", errors.Trace(err))
 			continue
 		}
-		ctx := NewContext(req, nil, c)
-		c.acceptChan <- ctx
+		ctx := NewContext(nil, resp, c)
+		c.insideResponseChan <- ctx
 	}
+}
+
+// 主动向外部发送数据
+func (c *Conn) sendInsideRequest() {
+	for {
+		ctx, ok := <-c.insideRequestChan
+		if !ok {
+			log.Println("[WARN] send inside request conn had closed")
+			return
+		}
+		if req := ctx.GetRequest(); req != nil {
+			err := c.WriteRequest(req)
+			if err != nil {
+				log.Println("[WARN] write request err:", errors.Trace(err))
+			}
+		}
+	}
+}
+
+func (c *Conn) Close() {
+	c.closeFlag = true
 }
 
 func (c *Conn) Write(buff []byte) (err error) {
@@ -104,8 +142,10 @@ func (c *Conn) Read() (buff []byte, err error) {
 	buff, err = c.Reader.ReadBytes(BufferEndFlag)
 	if err == io.EOF {
 		c.Close()
-		close(c.writeChan)
-		close(c.acceptChan)
+		close(c.outsideRequestChan)
+		close(c.outsideResponseChan)
+		close(c.insideRequestChan)
+		close(c.insideResponseChan)
 	}
 	return buff, err
 }
@@ -136,14 +176,29 @@ func (c *Conn) ReadResponse() (response *Response, err error) {
 	return
 }
 
-func (c *Conn) Process(handler func(ctx *Context)) {
+// 处理外部主动发来的数据
+func (c *Conn) ProcessOutsideRequest(handler func(ctx *Context)) {
 	for {
-		ctx, ok := <-c.acceptChan
+		ctx, ok := <-c.outsideRequestChan
 		if !ok {
 			log.Println("accept conn had closed")
 			return
 		}
 		handler(ctx)
-		c.writeChan <- ctx
+		c.outsideResponseChan <- ctx
+	}
+}
+
+// 主动向外部发送数据后，处理对方的响应
+func (c *Conn) ProcessInsideRequest(ctx *Context, handler func(ctx *Context)) {
+	for {
+		c.insideRequestChan <- ctx
+		resp, err := c.ReadResponse()
+		if err != nil {
+			log.Println("[WARN] read response err", errors.Trace(err))
+		}
+		respCtx := NewContext(ctx.GetRequest(), resp, c)
+		handler(respCtx)
+		c.insideResponseChan <- respCtx
 	}
 }
