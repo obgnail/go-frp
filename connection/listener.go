@@ -23,6 +23,7 @@ func (l *Listener) StartListen() {
 		err := fmt.Errorf("has no lisener")
 		log.Fatal(err)
 	}
+	log.Println("[INFO] start listen :", l.addr)
 	for {
 		conn, err := l.tcpListener.AcceptTCP()
 		if err != nil {
@@ -31,7 +32,7 @@ func (l *Listener) StartListen() {
 			}
 			continue
 		}
-
+		log.Println("[INFO] get remote conn:", conn.RemoteAddr())
 		c := NewConn(conn)
 		l.connChan <- c
 	}

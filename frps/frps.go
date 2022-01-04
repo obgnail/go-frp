@@ -1,11 +1,13 @@
-package frps
+package main
 
 import (
 	"fmt"
 	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/connection"
+	"io"
 	"log"
 	"sync"
+	"time"
 )
 
 type ServerStatus int
@@ -51,17 +53,21 @@ func (s *ProxyServer) Unlock() {
 }
 
 // 所有连接发送的数据都会到handler函数处理
-func (s *ProxyServer) Handler(ctx *connection.Context) {
-	req := ctx.GetRequest()
-	//conn := ctx.GetConn()
-	if ctx.IsHeartBeat() {
-		log.Printf("ProxyName [%s], get heartbeat\n", req.ProxyName)
+func (s *ProxyServer) Process(conn *connection.Conn) {
+	for {
+		req, err := conn.ReadRequest()
+		if err != nil {
+			log.Println("[WARN] proxy server read request err:", errors.Trace(err))
+			if err == io.EOF {
+				log.Printf("ProxyName [%s], client is dead!\n", s.Name)
+				conn.Close()
+			}
+			return
+		}
+		log.Println("sever receive:", req.ProxyName, req.Type)
+		time.Sleep(time.Second)
 		resp := connection.NewHeartbeatResponse(req.ProxyName)
-		ctx.SetResponse(resp)
-	} else if ctx.IsEstablishConnection() {
-
-	} else {
-
+		conn.WriteResponse(resp)
 	}
 }
 
@@ -78,6 +84,6 @@ func (s *ProxyServer) Server() {
 			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
 			continue
 		}
-		go conn.ProcessOutsideRequest(s.Handler)
+		go s.Process(conn)
 	}
 }
