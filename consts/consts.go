@@ -1,4 +1,7 @@
 package consts
 
-type Status int
+import "time"
 
+const (
+	HeartbeatTimeout = 30 * time.Second
+)
