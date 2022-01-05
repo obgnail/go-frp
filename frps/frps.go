@@ -87,7 +87,19 @@ func (s *ProxyServer) HandlerClientInit(clientConn *connection.Conn, msg *consts
 		log.Println("[ERROR] start proxy err", errors.Trace(err))
 		return
 	}
-	go proxyServer.ServerUser(clientConn)
+
+	// server User
+	go func() {
+		for {
+			userConn, err := proxyServer.listener.GetConn()
+			log.Println("[INFO] user connect success")
+			if err != nil {
+				log.Println("[WARN] proxy get conn err:", errors.Trace(err))
+				continue
+			}
+			s.ProcessUserConnection(userConn, clientConn)
+		}
+	}()
 
 	heartbeatTimer = time.AfterFunc(consts.HeartbeatTimeout, func() {
 		log.Println("[WARN] Heartbeat timeout!")
@@ -105,7 +117,7 @@ func (s *ProxyServer) HandlerClientInit(clientConn *connection.Conn, msg *consts
 }
 
 // 所有连接发送的控制数据都会到此函数处理
-func (s *ProxyServer) ProcessClientConnection(clientConn *connection.Conn) {
+func (s *ProxyServer) Process(clientConn *connection.Conn) {
 	for {
 		msg, err := clientConn.ReadMessage()
 		if err != nil {
@@ -123,7 +135,6 @@ func (s *ProxyServer) ProcessClientConnection(clientConn *connection.Conn) {
 		case consts.TypeClientWaitHeartbeat:
 			go s.SendHeartbeatMsg(clientConn, msg)
 		case consts.TypeProxyClientWaitProxyServer:
-			log.Println("[INFO] had receive TypeProxyClientWaitProxyServer msg")
 			go s.JoinConn(clientConn, msg)
 		}
 	}
@@ -168,26 +179,7 @@ func (s *ProxyServer) Server() {
 			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
 			continue
 		}
-		go s.ProcessClientConnection(clientConn)
-	}
-}
-
-func (s *ProxyServer) ServerUser(clientConn *connection.Conn) {
-	if s == nil {
-		log.Fatal(fmt.Errorf("proxy server is nil"))
-	}
-	if s.listener == nil {
-		log.Fatal(fmt.Errorf("proxy server has no listener"))
-	}
-	for {
-		userConn, err := s.listener.GetConn()
-		log.Println("[INFO] user connect success")
-		if err != nil {
-			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
-			continue
-		}
-		s.ProcessUserConnection(userConn, clientConn)
-		log.Println("3.=-=-=-=-=-", s.userConnList.Len())
+		go s.Process(clientConn)
 	}
 }
 

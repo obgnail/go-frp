@@ -82,6 +82,7 @@ func (c *Conn) ReadMessage() (message *consts.Message, err error) {
 	}
 	message = &consts.Message{}
 	if err = json.Unmarshal(msgBytes, message); err != nil {
+		log.Println("[ERROR] Unmarshal msgBytes Error:", string(msgBytes))
 		return
 	}
 
