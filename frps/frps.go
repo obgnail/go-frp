@@ -79,27 +79,26 @@ func (s *ProxyServer) HandlerClientInit(clientConn *connection.Conn, msg *consts
 	if !ok {
 		log.Fatal("[WARN] has no such proxyName:", msg.ProxyName)
 	}
-	fmt.Printf("---- receive msg:%+v\n", msg)
 
 	// start proxy
-	proxyServer, err := NewProxyServer(ps.Name, ps.BindAddr, ps.ListenPort)
+	proxy, err := NewProxyServer(ps.Name, ps.BindAddr, ps.ListenPort)
 	if err != nil {
 		log.Println("[ERROR] start proxy err", errors.Trace(err))
 		return
 	}
 
 	// server User
-	go func() {
+	go func(clientConn *connection.Conn) {
 		for {
-			userConn, err := proxyServer.listener.GetConn()
-			log.Println("[INFO] user connect success")
+			userConn, err := proxy.listener.GetConn()
+			log.Printf("[INFO] user connect success: %s -> %s", userConn.GetRemoteAddr(), userConn.GetLocalAddr())
 			if err != nil {
 				log.Println("[WARN] proxy get conn err:", errors.Trace(err))
 				continue
 			}
 			s.ProcessUserConnection(userConn, clientConn)
 		}
-	}()
+	}(clientConn)
 
 	heartbeatTimer = time.AfterFunc(consts.HeartbeatTimeout, func() {
 		log.Println("[WARN] Heartbeat timeout!")
@@ -116,10 +115,10 @@ func (s *ProxyServer) HandlerClientInit(clientConn *connection.Conn, msg *consts
 	}
 }
 
-// 所有连接发送的控制数据都会到此函数处理
-func (s *ProxyServer) Process(clientConn *connection.Conn) {
+// 所有连接发送的控制数据和用户数据都会到此函数处理
+func (s *ProxyServer) Process(conn *connection.Conn) {
 	for {
-		msg, err := clientConn.ReadMessage()
+		msg, err := conn.ReadMessage()
 		if err != nil {
 			log.Println("[WARN] proxy server read err:", errors.Trace(err))
 			if err == io.EOF {
@@ -131,11 +130,11 @@ func (s *ProxyServer) Process(clientConn *connection.Conn) {
 
 		switch msg.Type {
 		case consts.TypeClientInit:
-			go s.HandlerClientInit(clientConn, msg)
+			go s.HandlerClientInit(conn, msg)
 		case consts.TypeClientWaitHeartbeat:
-			go s.SendHeartbeatMsg(clientConn, msg)
+			go s.SendHeartbeatMsg(conn, msg)
 		case consts.TypeProxyClientWaitProxyServer:
-			go s.JoinConn(clientConn, msg)
+			go s.JoinConn(conn, msg)
 		}
 	}
 }
@@ -143,7 +142,6 @@ func (s *ProxyServer) Process(clientConn *connection.Conn) {
 // 所有用户数据都会到此函数处理
 func (s *ProxyServer) ProcessUserConnection(userConn *connection.Conn, clientConn *connection.Conn) {
 	s.userConnList.Push(userConn)
-	log.Printf("[INFO] append userConnList success, len(userConnList) == %d", s.userConnList.Len())
 
 	msg := consts.NewMessage(consts.TypeProxyServerWaitProxyClient, "", s.Name, nil)
 	err := clientConn.SendMessage(msg)
@@ -174,12 +172,12 @@ func (s *ProxyServer) Server() {
 		log.Fatal(fmt.Errorf("proxy server has no listener"))
 	}
 	for {
-		clientConn, err := s.listener.GetConn()
+		conn, err := s.listener.GetConn()
 		if err != nil {
 			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
 			continue
 		}
-		go s.Process(clientConn)
+		go s.Process(conn)
 	}
 }
 
@@ -189,7 +187,6 @@ func (s *ProxyServer) JoinConn(newClientConn *connection.Conn, msg *consts.Messa
 		newClientConn.Close()
 		return
 	}
-	log.Printf("[INFO] %+v\n", s.userConnList)
 	userConn := s.userConnList.Front().(*connection.Conn)
 	if userConn == nil {
 		log.Printf("[ERROR] userConn is nil")
@@ -198,7 +195,8 @@ func (s *ProxyServer) JoinConn(newClientConn *connection.Conn, msg *consts.Messa
 	}
 	s.userConnList.Pop()
 
-	log.Printf("Join two conns, (l[%s] r[%s]) (l[%s] r[%s])", newClientConn.GetLocalAddr(), newClientConn.GetRemoteAddr(),
-		userConn.GetLocalAddr(), userConn.GetRemoteAddr())
-	go connection.Join(newClientConn, userConn)
+	log.Printf("Join two conns, (l[%s] -> r[%s]) (l[%s] -> r[%s])", newClientConn.GetRemoteAddr(), newClientConn.GetLocalAddr(),
+		userConn.GetRemoteAddr(), userConn.GetLocalAddr())
+	connection.Join(newClientConn, userConn)
+	fmt.Println("asdasd1")
 }

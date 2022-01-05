@@ -32,7 +32,7 @@ func (l *Listener) StartListen() {
 			}
 			continue
 		}
-		log.Println("[INFO] get remote conn:", conn.RemoteAddr())
+		log.Printf("[INFO] get remote conn: %s -> %s\n", conn.RemoteAddr(), conn.LocalAddr())
 		c := NewConn(conn)
 		l.connChan <- c
 	}

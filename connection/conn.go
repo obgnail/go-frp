@@ -82,7 +82,8 @@ func (c *Conn) ReadMessage() (message *consts.Message, err error) {
 	}
 	message = &consts.Message{}
 	if err = json.Unmarshal(msgBytes, message); err != nil {
-		log.Println("[ERROR] Unmarshal msgBytes Error:", string(msgBytes))
+		log.Println("[ERROR] Unmarshal msgBytes Error:", string(msgBytes), "END")
+		log.Printf(" %s -> %s\n", c.GetRemoteAddr(), c.GetLocalAddr())
 		return
 	}
 
@@ -94,6 +95,8 @@ func (c *Conn) ReadMessage() (message *consts.Message, err error) {
 
 // will block until connection close
 func Join(c1 *Conn, c2 *Conn) {
+	log.Printf("join c1: %s -> %s\n", c1.GetRemoteAddr(), c1.GetLocalAddr())
+	log.Printf("join c2: %s -> %s\n", c2.GetRemoteAddr(), c2.GetLocalAddr())
 	var wait sync.WaitGroup
 	pipe := func(to *Conn, from *Conn) {
 		defer to.Close()

@@ -89,8 +89,8 @@ func (c *ProxyClient) JoinConn(serverConn *connection.Conn, msg *consts.Message)
 		log.Printf("[ERROR] ProxyName [%s], write to server error, %v", c.ProxyName, err)
 		return
 	}
-	log.Printf("Join two conns, (l[%s] r[%s]) (l[%s] r[%s])\n", localConn.GetLocalAddr(), localConn.GetRemoteAddr(),
-		remoteConn.GetLocalAddr(), remoteConn.GetRemoteAddr())
+	log.Printf("Join two conns, (l[%s] -> r[%s]) (l[%s] -> r[%s])\n", localConn.GetRemoteAddr(), localConn.GetLocalAddr(),
+		remoteConn.GetRemoteAddr(), remoteConn.GetLocalAddr())
 	go connection.Join(localConn, remoteConn)
 }
 
