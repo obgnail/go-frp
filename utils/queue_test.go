@@ -12,7 +12,7 @@ func TestQueue(t *testing.T) {
 	q.Push("two")
 	q.Push("three")
 	t.Log((q.Pop()).(string) == "two")
-	t.Log(q.Peek().(string) == "three")
+	t.Log(q.Front().(string) == "three")
 	t.Log((q.Pop()).(string) == "three")
 	t.Log((q.Pop()).(string) == "one")
 	t.Log((q.Pop()).(string) == "four")

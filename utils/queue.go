@@ -17,22 +17,22 @@ func NewQueue() *Queue {
 	return q
 }
 
-func (q *Queue) Peek() interface{} {
+func (q *Queue) Front() interface{} {
 	defer lock.Unlock()
 	lock.Lock()
-	return q.data.Back().Value
+	return q.data.Front().Value
 }
 
 func (q *Queue) Push(v interface{}) {
 	defer lock.Unlock()
 	lock.Lock()
-	q.data.PushFront(v)
+	q.data.PushBack(v)
 }
 
 func (q *Queue) Pop() interface{} {
 	defer lock.Unlock()
 	lock.Lock()
-	iter := q.data.Back()
+	iter := q.data.Front()
 	v := iter.Value
 	q.data.Remove(iter)
 	return v

@@ -5,9 +5,9 @@ import (
 	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/connection"
 	"github.com/obgnail/go-frp/consts"
+	"github.com/obgnail/go-frp/utils"
 	"io"
 	"log"
-	"sync"
 	"time"
 )
 
@@ -44,8 +44,7 @@ type ProxyServer struct {
 	Status     ServerStatus
 
 	listener     *connection.Listener
-	userConnList []*connection.Conn
-	mutex        sync.Mutex
+	userConnList *utils.Queue
 }
 
 func NewProxyServer(name, bindAddr string, listenPort int64) (*ProxyServer, error) {
@@ -59,17 +58,9 @@ func NewProxyServer(name, bindAddr string, listenPort int64) (*ProxyServer, erro
 		ListenPort:   listenPort,
 		Status:       Idle,
 		listener:     tcpListener,
-		userConnList: make([]*connection.Conn, 1),
+		userConnList: utils.NewQueue(),
 	}
 	return ps, nil
-}
-
-func (s *ProxyServer) Lock() {
-	s.mutex.Lock()
-}
-
-func (s *ProxyServer) Unlock() {
-	s.mutex.Unlock()
 }
 
 func (s *ProxyServer) SendHeartbeatMsg(clientConn *connection.Conn, msg *consts.Message) {
@@ -132,6 +123,7 @@ func (s *ProxyServer) ProcessClientConnection(clientConn *connection.Conn) {
 		case consts.TypeClientWaitHeartbeat:
 			go s.SendHeartbeatMsg(clientConn, msg)
 		case consts.TypeProxyClientWaitProxyServer:
+			log.Println("[INFO] had receive TypeProxyClientWaitProxyServer msg")
 			go s.JoinConn(clientConn, msg)
 		}
 	}
@@ -139,22 +131,18 @@ func (s *ProxyServer) ProcessClientConnection(clientConn *connection.Conn) {
 
 // 所有用户数据都会到此函数处理
 func (s *ProxyServer) ProcessUserConnection(userConn *connection.Conn, clientConn *connection.Conn) {
-	s.Lock()
-	s.userConnList = append(s.userConnList, userConn)
-	log.Println("[INFO] append userConnList success", len(s.userConnList) == 0)
-	s.Unlock()
+	s.userConnList.Push(userConn)
+	log.Printf("[INFO] append userConnList success, len(userConnList) == %d", s.userConnList.Len())
 
 	msg := consts.NewMessage(consts.TypeProxyServerWaitProxyClient, "", s.Name, nil)
 	err := clientConn.SendMessage(msg)
 	if err != nil {
 		log.Println("[WARN] server write heartbeat response err", errors.Trace(err))
 	}
-	log.Printf("[INFO] Send TypeProxyServerWaitProxyClient success")
+	log.Println("[INFO] Send TypeProxyServerWaitProxyClient success")
 
 	time.AfterFunc(consts.UserConnTimeout, func() {
-		s.Lock()
-		defer s.Unlock()
-		uc := s.userConnList[0]
+		uc := s.userConnList.Front().(*connection.Conn)
 		if uc == nil {
 			return
 		}
@@ -198,26 +186,25 @@ func (s *ProxyServer) ServerUser(clientConn *connection.Conn) {
 			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
 			continue
 		}
-		go s.ProcessUserConnection(userConn, clientConn)
+		s.ProcessUserConnection(userConn, clientConn)
+		log.Println("3.=-=-=-=-=-", s.userConnList.Len())
 	}
 }
 
 func (s *ProxyServer) JoinConn(newClientConn *connection.Conn, msg *consts.Message) {
-	s.Lock()
-	defer s.Unlock()
-	if len(s.userConnList) == 0 {
+	if s.userConnList.Len() == 0 {
 		log.Printf("[ERROR] get user conn from UserConnList: len(s.userConnList) == 0 ")
 		newClientConn.Close()
 		return
 	}
 	log.Printf("[INFO] %+v\n", s.userConnList)
-	userConn := s.userConnList[0]
+	userConn := s.userConnList.Front().(*connection.Conn)
 	if userConn == nil {
 		log.Printf("[ERROR] userConn is nil")
 		newClientConn.Close()
 		return
 	}
-	s.userConnList = s.userConnList[1:]
+	s.userConnList.Pop()
 
 	log.Printf("Join two conns, (l[%s] r[%s]) (l[%s] r[%s])", newClientConn.GetLocalAddr(), newClientConn.GetRemoteAddr(),
 		userConn.GetLocalAddr(), userConn.GetRemoteAddr())
