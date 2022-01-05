@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"sync"
 )
 
 const (
@@ -32,6 +33,14 @@ func NewConn(tcpConn *net.TCPConn) *Conn {
 
 func (c *Conn) Close() {
 	c.closeFlag = true
+}
+
+func (c *Conn) GetRemoteAddr() (addr string) {
+	return c.TcpConn.RemoteAddr().String()
+}
+
+func (c *Conn) GetLocalAddr() (addr string) {
+	return c.TcpConn.LocalAddr().String()
 }
 
 func (c *Conn) Send(buff []byte) (err error) {
@@ -79,5 +88,27 @@ func (c *Conn) ReadMessage() (message *consts.Message, err error) {
 	if message.Type == "" {
 		log.Fatal("[ERROR] message type is nil")
 	}
+	return
+}
+
+// will block until connection close
+func Join(c1 *Conn, c2 *Conn) {
+	var wait sync.WaitGroup
+	pipe := func(to *Conn, from *Conn) {
+		defer to.Close()
+		defer from.Close()
+		defer wait.Done()
+
+		var err error
+		_, err = io.Copy(to.TcpConn, from.TcpConn)
+		if err != nil {
+			log.Printf("join conns error, %v\n", err)
+		}
+	}
+
+	wait.Add(2)
+	go pipe(c1, c2)
+	go pipe(c2, c1)
+	wait.Wait()
 	return
 }

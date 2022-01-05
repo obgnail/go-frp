@@ -7,9 +7,9 @@ import (
 
 func main() {
 	fmt.Println("--- server start ---")
-	proxyServer, err := NewProxyServer("test", "0.0.0.0", 8888)
+	commonProxyServer, err := NewProxyServer("common", "0.0.0.0", 8888)
 	if err != nil {
 		fmt.Println(err)
 	}
-	proxyServer.Server()
+	commonProxyServer.Server()
 }

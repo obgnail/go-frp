@@ -47,7 +47,7 @@ func NewListener(bindAddr string, bindPort int64) (listener *Listener, err error
 	listener = &Listener{
 		addr:        tcpListener.Addr(),
 		tcpListener: tcpListener,
-		connChan:    make(chan *Conn),
+		connChan:    make(chan *Conn, 1),
 		closeFlag:   false,
 	}
 	go listener.StartListen()

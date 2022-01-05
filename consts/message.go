@@ -14,10 +14,11 @@ const (
 	TypeProxyServerWaitProxyClient MessageType = "1004"
 	TypeProxyServerWorking         MessageType = "1005"
 
-	TypeClientInit          MessageType = "1006"
-	TypeClientWaitHeartbeat MessageType = "1007"
+	TypeClientInit                 MessageType = "1006"
+	TypeClientWaitHeartbeat        MessageType = "1007"
+	TypeProxyClientWaitProxyServer MessageType = "1008"
 
-	TypeProxyClientWorking MessageType = "1008"
+	TypeProxyClientWorking MessageType = "1009"
 )
 
 type Message struct {
