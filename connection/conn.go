@@ -32,7 +32,14 @@ func NewConn(tcpConn *net.TCPConn) *Conn {
 }
 
 func (c *Conn) Close() {
-	c.closeFlag = true
+	if c.TcpConn != nil && c.closeFlag == false {
+		c.closeFlag = true
+		c.TcpConn.Close()
+	}
+}
+
+func (c *Conn) IsClosed() bool {
+	return c.closeFlag
 }
 
 func (c *Conn) GetRemoteAddr() (addr string) {
@@ -95,21 +102,20 @@ func (c *Conn) ReadMessage() (message *consts.Message, err error) {
 
 // will block until connection close
 func Join(c1 *Conn, c2 *Conn) {
-	log.Printf("join c1: %s -> %s\n", c1.GetRemoteAddr(), c1.GetLocalAddr())
-	log.Printf("join c2: %s -> %s\n", c2.GetRemoteAddr(), c2.GetLocalAddr())
 	var wait sync.WaitGroup
 	pipe := func(to *Conn, from *Conn) {
+		// 链接断开或发生异常时断开
 		defer to.Close()
 		defer from.Close()
 		defer wait.Done()
 
 		var err error
+		log.Println("______-----______")
 		_, err = io.Copy(to.TcpConn, from.TcpConn)
 		if err != nil {
 			log.Printf("join conns error, %v\n", err)
 		}
 	}
-
 	wait.Add(2)
 	go pipe(c1, c2)
 	go pipe(c2, c1)

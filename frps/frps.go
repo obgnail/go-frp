@@ -125,6 +125,7 @@ func (s *ProxyServer) Process(conn *connection.Conn) {
 				log.Printf("ProxyName [%s], client is dead!\n", s.Name)
 				return
 			}
+			log.Println("---- continue ----")
 			continue
 		}
 
@@ -151,12 +152,12 @@ func (s *ProxyServer) ProcessUserConnection(userConn *connection.Conn, clientCon
 	log.Println("[INFO] Send TypeProxyServerWaitProxyClient success")
 
 	time.AfterFunc(consts.UserConnTimeout, func() {
-		uc := s.userConnList.Front().(*connection.Conn)
+		uc := s.userConnList.Front()
 		if uc == nil {
 			return
 		}
 
-		if userConn == uc {
+		if userConn == uc.(*connection.Conn) {
 			log.Printf("[WARN] ProxyName [%s], user conn [%s] timeout\n", s.Name, userConn.GetRemoteAddr())
 		} else {
 			log.Printf("[INFO] ProxyName [%s], There's another user conn [%s] need to be processed\n", s.Name, userConn.GetRemoteAddr())
@@ -197,6 +198,5 @@ func (s *ProxyServer) JoinConn(newClientConn *connection.Conn, msg *consts.Messa
 
 	log.Printf("Join two conns, (l[%s] -> r[%s]) (l[%s] -> r[%s])", newClientConn.GetRemoteAddr(), newClientConn.GetLocalAddr(),
 		userConn.GetRemoteAddr(), userConn.GetLocalAddr())
-	connection.Join(newClientConn, userConn)
-	fmt.Println("asdasd1")
+	go connection.Join(newClientConn, userConn)
 }
