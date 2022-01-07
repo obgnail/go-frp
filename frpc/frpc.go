@@ -8,6 +8,7 @@ import (
 	"github.com/obgnail/go-frp/utils"
 	"io"
 	"log"
+	"strconv"
 	"time"
 )
 
@@ -72,18 +73,31 @@ func (c *ProxyClient) GetRemoteConn(remoteAddr string, remotePort int64) (remote
 }
 
 func (c *ProxyClient) JoinConn(serverConn *connection.Conn, msg *consts.Message) {
+	port := msg.Content
+	if port == "" {
+		log.Printf("[ERROR] ProxyName [%s], get port error", c.ProxyName)
+		return
+	}
+	remotePort,err := strconv.ParseInt(port, 10, 64)
+	if err != nil {
+		log.Printf("[ERROR] ProxyName [%s], parseInt err, %v", c.ProxyName, errors.Trace(err))
+		return
+	}
+
 	localConn, err := c.GetLocalConn()
 	if err != nil {
 		log.Printf("[ERROR] ProxyName [%s], get local conn error, %v", c.ProxyName, errors.Trace(err))
 		return
 	}
-	remoteConn, err := c.GetRemoteConn(c.RemoteAddr, c.RemotePort)
+
+	remoteAddr := c.RemoteAddr
+	remoteConn, err := c.GetRemoteConn(remoteAddr, remotePort)
 	if err != nil {
 		log.Printf("[ERROR] ProxyName [%s], get remote conn error, %v", c.ProxyName, errors.Trace(err))
 		return
 	}
 
-	joinMsg := consts.NewMessage(consts.TypeProxyClientWaitProxyServer, "", c.ProxyName, nil)
+	joinMsg := consts.NewMessage(consts.TypeProxyClientWaitProxyServer, port, c.ProxyName, nil)
 	err = remoteConn.SendMessage(joinMsg)
 	if err != nil {
 		log.Printf("[ERROR] ProxyName [%s], write to server error, %v", c.ProxyName, err)

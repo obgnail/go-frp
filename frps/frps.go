@@ -5,9 +5,9 @@ import (
 	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/connection"
 	"github.com/obgnail/go-frp/consts"
-	"github.com/obgnail/go-frp/utils"
 	"io"
 	"log"
+	"sync"
 	"time"
 )
 
@@ -15,25 +15,28 @@ type ServerStatus int
 
 const (
 	Idle ServerStatus = iota
+	Ready
 	Work
 )
 
 var heartbeatTimer *time.Timer = nil
 
-var ProxyServerMap = map[string]*ProxyServer{
+type AppProxyMap map[string]struct {
+	Name       string
+	BindAddr   string
+	ListenPort int64
+}
+
+var appProxyMap = AppProxyMap{
 	"SSH": {
 		Name:       "SSH",
 		BindAddr:   "0.0.0.0",
 		ListenPort: 6000,
-		Status:     Idle,
-		listener:   nil,
 	},
 	"HTTP": {
 		Name:       "HTTP",
 		BindAddr:   "0.0.0.0",
 		ListenPort: 5000,
-		Status:     Idle,
-		listener:   nil,
 	},
 }
 
@@ -41,30 +44,43 @@ type ProxyServer struct {
 	Name       string
 	BindAddr   string
 	ListenPort int64
-	Status     ServerStatus
 
-	listener     *connection.Listener
-	userConnList *utils.Queue
+	Status ServerStatus
+
+	appProxyMap           AppProxyMap
+	listener              *connection.Listener
+	waitToJoinUserConnMap sync.Map // map[appProxyPort]UserConn
 }
 
-func NewProxyServer(name, bindAddr string, listenPort int64) (*ProxyServer, error) {
+func NewProxyServer(name, bindAddr string, listenPort int64, appProxyMap AppProxyMap) (*ProxyServer, error) {
 	tcpListener, err := connection.NewListener(bindAddr, listenPort)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	ps := &ProxyServer{
-		Name:         name,
-		BindAddr:     bindAddr,
-		ListenPort:   listenPort,
-		Status:       Idle,
-		listener:     tcpListener,
-		userConnList: utils.NewQueue(),
+		Name:        name,
+		BindAddr:    bindAddr,
+		ListenPort:  listenPort,
+		appProxyMap: appProxyMap,
+		Status:      Idle,
+		listener:    tcpListener,
 	}
 	return ps, nil
 }
 
-func (s *ProxyServer) SendHeartbeatMsg(clientConn *connection.Conn, msg *consts.Message) {
+func (s *ProxyServer) SetStatus(status ServerStatus) {
+	s.Status = status
+}
+
+func (s *ProxyServer) GetStatus() ServerStatus {
+	return s.Status
+}
+
+func (s *ProxyServer) keepHeartbeat(clientConn *connection.Conn, msg *consts.Message) {
 	fmt.Printf("receive msg:%+v\n", msg)
+	if heartbeatTimer == nil {
+		log.Fatal("heartbeatTimer is nil")
+	}
 	heartbeatTimer.Reset(consts.HeartbeatTimeout)
 
 	resp := consts.NewMessage(consts.TypeServerWaitHeartbeat, "", s.Name, nil)
@@ -74,49 +90,26 @@ func (s *ProxyServer) SendHeartbeatMsg(clientConn *connection.Conn, msg *consts.
 	}
 }
 
-func (s *ProxyServer) HandlerClientInit(clientConn *connection.Conn, msg *consts.Message) {
-	ps, ok := ProxyServerMap[msg.ProxyName]
-	if !ok {
-		log.Fatal("[WARN] has no such proxyName:", msg.ProxyName)
-	}
+func (s *ProxyServer) initClient(clientConn *connection.Conn, msg *consts.Message) {
+	// 开始代理具体服务
+	go s.startAppProxyServer(clientConn, msg)
 
-	// start proxy
-	proxy, err := NewProxyServer(ps.Name, ps.BindAddr, ps.ListenPort)
-	if err != nil {
-		log.Println("[ERROR] start proxy err", errors.Trace(err))
-		return
-	}
-
-	// server User
-	go func(clientConn *connection.Conn) {
-		for {
-			userConn, err := proxy.listener.GetConn()
-			log.Printf("[INFO] user connect success: %s -> %s", userConn.GetRemoteAddr(), userConn.GetLocalAddr())
-			if err != nil {
-				log.Println("[WARN] proxy get conn err:", errors.Trace(err))
-				continue
-			}
-			s.ProcessUserConnection(userConn, clientConn)
-		}
-	}(clientConn)
-
+	// start first heartbeat
 	heartbeatTimer = time.AfterFunc(consts.HeartbeatTimeout, func() {
 		log.Println("[WARN] Heartbeat timeout!")
 		if clientConn != nil {
 			clientConn.Close()
 		}
 	})
-	defer heartbeatTimer.Stop()
-
 	resp := consts.NewMessage(consts.TypeServerWaitHeartbeat, "proxy started", s.Name, nil)
-	err = clientConn.SendMessage(resp)
+	err := clientConn.SendMessage(resp)
 	if err != nil {
 		log.Println("[WARN] server write heartbeat response err", errors.Trace(err))
 	}
 }
 
 // 所有连接发送的控制数据和用户数据都会到此函数处理
-func (s *ProxyServer) Process(conn *connection.Conn) {
+func (s *ProxyServer) process(conn *connection.Conn) {
 	for {
 		msg, err := conn.ReadMessage()
 		if err != nil {
@@ -131,38 +124,94 @@ func (s *ProxyServer) Process(conn *connection.Conn) {
 
 		switch msg.Type {
 		case consts.TypeClientInit:
-			go s.HandlerClientInit(conn, msg)
+			go s.initClient(conn, msg)
 		case consts.TypeClientWaitHeartbeat:
-			go s.SendHeartbeatMsg(conn, msg)
-		case consts.TypeProxyClientWaitProxyServer:
-			go s.JoinConn(conn, msg)
+			go s.keepHeartbeat(conn, msg)
 		}
 	}
 }
 
-// 所有用户数据都会到此函数处理
-func (s *ProxyServer) ProcessUserConnection(userConn *connection.Conn, clientConn *connection.Conn) {
-	s.userConnList.Push(userConn)
-
-	msg := consts.NewMessage(consts.TypeProxyServerWaitProxyClient, "", s.Name, nil)
-	err := clientConn.SendMessage(msg)
-	if err != nil {
-		log.Println("[WARN] server write heartbeat response err", errors.Trace(err))
+func (s *ProxyServer) startAppProxyServer(clientConn *connection.Conn, msg *consts.Message) {
+	ps, ok := s.appProxyMap[msg.ProxyName]
+	if !ok {
+		log.Fatal("[WARN] has no such proxyName:", msg.ProxyName)
 	}
-	log.Println("[INFO] Send TypeProxyServerWaitProxyClient success")
+	appProxy, err := NewProxyServer(ps.Name, ps.BindAddr, ps.ListenPort, nil)
+	if err != nil {
+		log.Println("[ERROR] start proxy err", errors.Trace(err))
+		return
+	}
 
-	time.AfterFunc(consts.UserConnTimeout, func() {
-		uc := s.userConnList.Front()
-		if uc == nil {
-			return
+	for {
+		conn, err := appProxy.listener.GetConn()
+		if err != nil {
+			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
+			continue
 		}
+		log.Printf("[INFO] user connect success: %s -> %s", conn.GetRemoteAddr(), conn.GetLocalAddr())
 
-		if userConn == uc.(*connection.Conn) {
-			log.Printf("[WARN] ProxyName [%s], user conn [%s] timeout\n", s.Name, userConn.GetRemoteAddr())
+		// connection from client
+		if appProxy.GetStatus() == Ready && conn.GetRemoteIP() == clientConn.GetRemoteIP() {
+			msg, err := conn.ReadMessage()
+			if err != nil {
+				log.Println("[WARN] proxy client read err:", errors.Trace(err))
+				if err == io.EOF {
+					log.Printf("ProxyName [%s], server is dead!\n", appProxy.Name)
+					return
+				}
+				continue
+			}
+			if msg.Type != consts.TypeProxyClientWaitProxyServer {
+				log.Println("[Error] get wrong msg")
+				continue
+			}
+
+			appProxyPort := msg.Content
+			newClientConn, ok := s.waitToJoinUserConnMap.Load(appProxyPort)
+			if !ok {
+				log.Println("[Error] waitToJoinUserConnMap load failed. appProxyAddrEny:", appProxyPort)
+				continue
+			}
+			s.waitToJoinUserConnMap.Delete(appProxyPort)
+
+			waitToJoinClientConn := conn
+			waitToJoinUserConn := newClientConn.(*connection.Conn)
+			log.Printf("Join two conns, (l[%s] -> r[%s]) (l[%s] -> r[%s])",
+				waitToJoinUserConn.GetRemoteAddr(),
+				waitToJoinUserConn.GetLocalAddr(),
+				waitToJoinClientConn.GetRemoteAddr(),
+				waitToJoinClientConn.GetLocalAddr(),
+			)
+			go connection.Join(waitToJoinUserConn, waitToJoinClientConn)
+			appProxy.SetStatus(Work)
+
+			// connection from user
 		} else {
-			log.Printf("[INFO] ProxyName [%s], There's another user conn [%s] need to be processed\n", s.Name, userConn.GetRemoteAddr())
+			port := fmt.Sprintf("%d", ps.ListenPort)
+			s.waitToJoinUserConnMap.Store(port, conn)
+
+			msg := consts.NewMessage(consts.TypeProxyServerWaitProxyClient, port, s.Name, nil)
+			err := clientConn.SendMessage(msg)
+			if err != nil {
+				log.Println("[WARN] server write heartbeat response err", errors.Trace(err))
+			}
+			log.Println("[INFO] Send TypeProxyServerWaitProxyClient success")
+			appProxy.SetStatus(Ready)
+
+			time.AfterFunc(consts.UserConnTimeout, func() {
+				uc, ok := s.waitToJoinUserConnMap.Load(port)
+				if !ok || uc == nil {
+					return
+				}
+				if conn == uc.(*connection.Conn) {
+					log.Printf("[WARN] ProxyName [%s], user conn [%s] timeout\n", s.Name, conn.GetRemoteAddr())
+				} else {
+					log.Printf("[INFO] ProxyName [%s], There's another user conn [%s] need to be processed\n", s.Name, conn.GetRemoteAddr())
+				}
+				appProxy.SetStatus(Idle)
+			})
 		}
-	})
+	}
 }
 
 func (s *ProxyServer) Server() {
@@ -178,25 +227,6 @@ func (s *ProxyServer) Server() {
 			log.Println("[WARN] proxy get conn err:", errors.Trace(err))
 			continue
 		}
-		go s.Process(conn)
+		go s.process(conn)
 	}
-}
-
-func (s *ProxyServer) JoinConn(newClientConn *connection.Conn, msg *consts.Message) {
-	if s.userConnList.Len() == 0 {
-		log.Printf("[ERROR] get user conn from UserConnList: len(s.userConnList) == 0 ")
-		newClientConn.Close()
-		return
-	}
-	userConn := s.userConnList.Front().(*connection.Conn)
-	if userConn == nil {
-		log.Printf("[ERROR] userConn is nil")
-		newClientConn.Close()
-		return
-	}
-	s.userConnList.Pop()
-
-	log.Printf("Join two conns, (l[%s] -> r[%s]) (l[%s] -> r[%s])", newClientConn.GetRemoteAddr(), newClientConn.GetLocalAddr(),
-		userConn.GetRemoteAddr(), userConn.GetLocalAddr())
-	go connection.Join(newClientConn, userConn)
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strings"
 	"sync"
 )
 
@@ -44,6 +45,10 @@ func (c *Conn) IsClosed() bool {
 
 func (c *Conn) GetRemoteAddr() (addr string) {
 	return c.TcpConn.RemoteAddr().String()
+}
+
+func (c *Conn) GetRemoteIP() (ip string) {
+	return strings.Split(c.GetRemoteAddr(), ":")[0]
 }
 
 func (c *Conn) GetLocalAddr() (addr string) {
@@ -110,7 +115,6 @@ func Join(c1 *Conn, c2 *Conn) {
 		defer wait.Done()
 
 		var err error
-		log.Println("______-----______")
 		_, err = io.Copy(to.TcpConn, from.TcpConn)
 		if err != nil {
 			log.Printf("join conns error, %v\n", err)
