@@ -27,19 +27,6 @@ type AppProxyMap map[string]struct {
 	ListenPort int64
 }
 
-var appProxyMap = AppProxyMap{
-	"SSH": {
-		Name:       "SSH",
-		BindAddr:   "0.0.0.0",
-		ListenPort: 6000,
-	},
-	"HTTP": {
-		Name:       "HTTP",
-		BindAddr:   "0.0.0.0",
-		ListenPort: 5000,
-	},
-}
-
 type ProxyServer struct {
 	Name       string
 	BindAddr   string
