@@ -98,7 +98,7 @@ func (c *ProxyClient) getJoinConnsFromMsg(msg *consts.Message) (localConn, remot
 	return
 }
 
-func (c *ProxyClient) JoinConn(serverConn *connection.Conn, msg *consts.Message) {
+func (c *ProxyClient) joinConn(serverConn *connection.Conn, msg *consts.Message) {
 	localConn, remoteConn, err := c.getJoinConnsFromMsg(msg)
 	if err != nil {
 		log.Printf("[ERROR] get join conns from msg. %v", errors.Trace(err))
@@ -132,12 +132,29 @@ func (c *ProxyClient) sendInitAppMsg(conn *connection.Conn) {
 		log.Fatal("[ERROR] has no app client to proxy")
 	}
 
-	// 通知server需要c.appClientMap这些app开启监听
+	// 通知server开始监听这些app
 	msg := consts.NewMessage(consts.TypeInitApp, "", c.ProxyName, c.appClientMap)
 	if err := conn.SendMessage(msg); err != nil {
 		log.Println("[WARN] client write init msg err", errors.Trace(err))
 		return
 	}
+}
+
+func (c *ProxyClient) storeServerApp(conn *connection.Conn, msg *consts.Message) {
+	if msg.Meta == nil {
+		log.Fatal("[ERROR] has no app to proxy")
+	}
+
+	for name, app := range msg.Meta.(map[string]interface{}) {
+		appServer := app.(map[string]interface{})
+		c.onListenAppServers[name] = &consts.AppServer{
+			Name:       appServer["Name"].(string),
+			ListenPort: int64(appServer["ListenPort"].(float64)),
+		}
+	}
+
+	// prepared, start first heartbeat
+	c.heartbeatChan <- msg
 
 	// keep Heartbeat
 	go func() {
@@ -159,23 +176,6 @@ func (c *ProxyClient) sendInitAppMsg(conn *connection.Conn) {
 			}
 		}
 	}()
-}
-
-func (c *ProxyClient) storeServerApp(serverConn *connection.Conn, msg *consts.Message) {
-	if msg.Meta == nil {
-		log.Fatal("[ERROR] has no app to proxy")
-	}
-
-	for name, app := range msg.Meta.(map[string]interface{}) {
-		appServer := app.(map[string]interface{})
-		c.onListenAppServers[name] = &consts.AppServer{
-			Name:       appServer["Name"].(string),
-			ListenPort: int64(appServer["ListenPort"].(float64)),
-		}
-	}
-
-	// prepared, start first heartbeat
-	c.heartbeatChan <- msg
 }
 
 func (c *ProxyClient) Run() {
@@ -203,7 +203,7 @@ func (c *ProxyClient) Run() {
 		case consts.TypeAppMsg:
 			c.storeServerApp(conn, msg)
 		case consts.TypeAppWaitJoin:
-			go c.JoinConn(conn, msg)
+			go c.joinConn(conn, msg)
 		}
 	}
 }

@@ -19,9 +19,8 @@ const (
 	Work
 )
 
-// NOTE: ProxySever 在执行 startProxyApp() 时会自我派生,
-// 父亲称为 commonServer, 用于建立链接和维持heartbeat。
-// 儿子称为 appServer, 用于转发报文。
+// commonServer: Used to establish connection and keep heartbeat。
+// appServer(appProxyServer): Used to proxy data
 type ProxyServer struct {
 	Name         string
 	bindAddr     string
@@ -29,10 +28,10 @@ type ProxyServer struct {
 	appServerMap map[string]*consts.AppServer
 
 	listener              *connection.Listener
-	onListenAppServers    map[string]*ProxyServer // 正在监听端口的appServer
-	status                ServerStatus            // status 字段只用于 appProxy
-	waitToJoinUserConnMap sync.Map                // map[appProxyName]UserConn
-	heartbeatChan         chan *consts.Message    // when get heartbeat msg, put msg in
+	status                ServerStatus            // used in appServer only
+	waitToJoinUserConnMap sync.Map                // map[appServerName]UserConn, used in appServer only
+	onListenAppServers    map[string]*ProxyServer // appServer which is listening its own port, used in commonServer only
+	heartbeatChan         chan *consts.Message    // when get heartbeat msg, put msg in, used in commonServer only
 }
 
 func NewProxyServer(name, bindAddr string, listenPort int64, appProxyList []*consts.AppServer) (*ProxyServer, error) {
@@ -65,7 +64,7 @@ func (s *ProxyServer) GetStatus() ServerStatus {
 	return s.status
 }
 
-func (s *ProxyServer) checkAppClientFromMsg(msg *consts.Message) map[string]*consts.AppServer {
+func (s *ProxyServer) checkApp(msg *consts.Message) map[string]*consts.AppServer {
 	if msg.Meta == nil {
 		log.Fatal("[ERROR] has no app client to proxy")
 	}
@@ -89,7 +88,7 @@ func (s *ProxyServer) checkAppClientFromMsg(msg *consts.Message) map[string]*con
 }
 
 func (s *ProxyServer) initApp(clientConn *connection.Conn, msg *consts.Message) {
-	waitToListenAppServers := s.checkAppClientFromMsg(msg)
+	waitToListenAppServers := s.checkApp(msg)
 
 	// 开始代理具体服务
 	for _, app := range waitToListenAppServers {
@@ -125,17 +124,17 @@ func (s *ProxyServer) initApp(clientConn *connection.Conn, msg *consts.Message) 
 }
 
 func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.AppServer) {
-	var appProxyServer *ProxyServer
 	if s.onListenAppServers[app.Name] != nil {
-		appProxyServer = s.onListenAppServers[app.Name]
-	} else {
-		ps, err := NewProxyServer(app.Name, s.bindAddr, app.ListenPort, nil)
-		if err != nil {
-			log.Println("[WARN] start proxy err, maybe address already in use:", errors.Trace(err))
-			return
-		}
-		appProxyServer = ps
+		log.Println("[INFO] app is listening")
+		return
 	}
+
+	appProxyServer, err := NewProxyServer(app.Name, s.bindAddr, app.ListenPort, nil)
+	if err != nil {
+		log.Println("[WARN] start proxy err, maybe address already in use:", errors.Trace(err))
+		return
+	}
+	s.onListenAppServers[app.Name] = appProxyServer
 
 	for {
 		conn, err := appProxyServer.listener.GetConn()
@@ -224,15 +223,15 @@ func (s *ProxyServer) process(conn *connection.Conn) {
 		}
 
 		switch msg.Type {
-		case consts.TypeClientHeartbeat:
-			s.heartbeatChan <- msg
 		case consts.TypeInitApp:
 			go s.initApp(conn, msg)
+		case consts.TypeClientHeartbeat:
+			s.heartbeatChan <- msg
 		}
 	}
 }
 
-func (s *ProxyServer) Server() {
+func (s *ProxyServer) Run() {
 	if s == nil {
 		log.Fatal(fmt.Errorf("proxy server is nil"))
 	}

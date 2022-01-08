@@ -17,5 +17,5 @@ func main() {
 	if err != nil {
 		fmt.Println(err)
 	}
-	commonProxyServer.Server()
+	commonProxyServer.Run()
 }
