@@ -2,23 +2,18 @@ package main
 
 import (
 	"fmt"
+	"github.com/obgnail/go-frp/consts"
 )
 
 func main() {
 	fmt.Println("--- server start ---")
-	var appProxyMap = AppProxyMap{
-		"SSH": {
-			Name:       "SSH",
-			BindAddr:   "0.0.0.0",
-			ListenPort: 6000,
-		},
-		"HTTP": {
-			Name:       "HTTP",
-			BindAddr:   "0.0.0.0",
-			ListenPort: 5000,
-		},
+
+	appServerList := []*consts.AppServer{
+		{Name: "SSH", ListenPort: 6000},
+		{Name: "HTTP", ListenPort: 5000},
 	}
-	commonProxyServer, err := NewProxyServer("common", "0.0.0.0", 8888, appProxyMap)
+
+	commonProxyServer, err := NewProxyServer("common", "0.0.0.0", 8888, appServerList)
 	if err != nil {
 		fmt.Println(err)
 	}
