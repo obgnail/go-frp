@@ -129,6 +129,7 @@ func (s *ProxyServer) initApp(clientConn *connection.Conn, msg *consts.Message) 
 				if err != nil {
 					log.Warn(e.SendHeartbeatMessageError())
 					log.Warn(errors.ErrorStack(errors.Trace(err)))
+					return
 				}
 			case <-time.After(consts.HeartbeatTimeout):
 				log.Warn("Heartbeat timeout!")
