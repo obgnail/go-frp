@@ -82,6 +82,7 @@ func (s *ProxyServer) checkApp(msg *consts.Message) (map[string]*consts.AppServe
 		wantProxyApps[name] = &consts.AppClient{
 			Name:      a["Name"].(string),
 			LocalPort: int64(a["LocalPort"].(float64)),
+			Password:  a["Password"].(string),
 		}
 	}
 	waitToListenAppServers := make(map[string]*consts.AppServer)
@@ -89,6 +90,9 @@ func (s *ProxyServer) checkApp(msg *consts.Message) (map[string]*consts.AppServe
 		appServer, ok := s.appServerMap[appClient.Name]
 		if !ok {
 			return nil, e.NotFoundError(e.ModelServer, e.App)
+		}
+		if appClient.Password != appServer.Password {
+			return nil, e.InvalidPasswordError(appClient.Name)
 		}
 		waitToListenAppServers[appClient.Name] = appServer
 	}

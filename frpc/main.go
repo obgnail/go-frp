@@ -8,8 +8,8 @@ import (
 
 func main() {
 	appClientList := []*consts.AppClient{
-		{Name: "SSH", LocalPort: 22},
-		{Name: "HTTP", LocalPort: 7777},
+		{Name: "SSH", LocalPort: 22, Password: ""},
+		{Name: "HTTP", LocalPort: 7777, Password: ""},
 	}
 
 	commonProxyClient, err := NewProxyClient("common", 5555, "0.0.0.0", 8888, appClientList)

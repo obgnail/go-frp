@@ -11,9 +11,11 @@ const (
 type AppServer struct {
 	Name       string
 	ListenPort int64
+	Password   string
 }
 
 type AppClient struct {
 	Name      string
 	LocalPort int64
+	Password  string
 }

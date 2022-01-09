@@ -22,7 +22,8 @@ const (
 	ReasonEmpty     = "Empty"
 	ReasonClose     = "Close"
 	ReasonSend      = "Send"
-	ReasonJoin      = "join"
+	ReasonJoin      = "Join"
+	ReasonPassword  = "Password"
 )
 
 // ErrArg
@@ -74,4 +75,8 @@ func JoinConnError() error {
 
 func SendHeartbeatMessageError() error {
 	return New(ModelMessage, ReasonSend, Heartbeat)
+}
+
+func InvalidPasswordError(args interface{}) error {
+	return New(ModelApp, ReasonPassword, args)
 }
