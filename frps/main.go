@@ -1,13 +1,12 @@
 package main
 
 import (
-	"fmt"
+	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/consts"
+	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	fmt.Println("--- server start ---")
-
 	appServerList := []*consts.AppServer{
 		{Name: "SSH", ListenPort: 6000},
 		{Name: "HTTP", ListenPort: 5000},
@@ -15,7 +14,7 @@ func main() {
 
 	commonProxyServer, err := NewProxyServer("common", "0.0.0.0", 8888, appServerList)
 	if err != nil {
-		fmt.Println(err)
+		log.Error(errors.ErrorStack(err))
 	}
 	commonProxyServer.Run()
 }

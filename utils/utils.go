@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"net"
 )
 
@@ -15,6 +15,6 @@ func Dail(host string, port int64) (conn *net.TCPConn, err error) {
 	if err != nil {
 		return
 	}
-	log.Println("[INFO] start connect:", conn.LocalAddr(), "->", conn.RemoteAddr())
+	log.Info("start connect:", conn.LocalAddr(), "->", conn.RemoteAddr())
 	return conn, nil
 }

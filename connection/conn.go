@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/consts"
+	"github.com/obgnail/go-frp/e"
+	log "github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"net"
 	"strings"
 	"sync"
@@ -30,6 +32,10 @@ func NewConn(tcpConn *net.TCPConn) *Conn {
 		Reader:    bufio.NewReader(tcpConn),
 	}
 	return c
+}
+
+func (c *Conn) String() string {
+	return fmt.Sprintf("%s <===> %s", c.GetRemoteAddr(), c.GetLocalAddr())
 }
 
 func (c *Conn) Close() {
@@ -68,7 +74,7 @@ func (c *Conn) Send(buff []byte) (err error) {
 
 func (c *Conn) SendMessage(msg *consts.Message) (err error) {
 	if msg.Type == "" {
-		log.Fatal("message's type is empty")
+		return e.SendMessageError(msg)
 	}
 	msgBytes, _ := json.Marshal(msg)
 	err = c.Send(msgBytes)
@@ -94,13 +100,13 @@ func (c *Conn) ReadMessage() (message *consts.Message, err error) {
 	}
 	message = &consts.Message{}
 	if err = json.Unmarshal(msgBytes, message); err != nil {
-		log.Println("[ERROR] Unmarshal msgBytes Error:", string(msgBytes), "END")
-		log.Printf(" %s -> %s\n", c.GetRemoteAddr(), c.GetLocalAddr())
+		err = e.UnmarshalMessageError(string(msgBytes))
 		return
 	}
 
 	if message.Type == "" {
-		log.Fatal("[ERROR] message type is nil")
+		err = e.NotFoundError(e.ModelMessage, e.Type)
+		return
 	}
 	return
 }
@@ -117,7 +123,7 @@ func Join(c1 *Conn, c2 *Conn) {
 		var err error
 		_, err = io.Copy(to.TcpConn, from.TcpConn)
 		if err != nil {
-			log.Printf("join conns error, %v\n", err)
+			log.Warn(e.JoinConnError(), err)
 		}
 	}
 	wait.Add(2)

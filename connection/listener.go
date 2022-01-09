@@ -3,7 +3,9 @@ package connection
 import (
 	"fmt"
 	"github.com/juju/errors"
-	"log"
+	"github.com/obgnail/go-frp/e"
+	"github.com/obgnail/go-frp/utils"
+	log "github.com/sirupsen/logrus"
 	"net"
 )
 
@@ -11,28 +13,31 @@ type Listener struct {
 	addr        net.Addr
 	tcpListener *net.TCPListener
 	connChan    chan *Conn
-	closeFlag   bool
+	ConnList    *utils.Queue
 }
 
 func (l *Listener) Close() {
-	l.closeFlag = true
+	for l.ConnList.Len() != 0 {
+		if c := l.ConnList.Pop(); c != nil {
+			if conn := c.(*Conn); !conn.IsClosed() {
+				conn.Close()
+			}
+		}
+	}
+	l.tcpListener.Close()
 }
 
 func (l *Listener) StartListen() {
 	if l.tcpListener == nil {
-		err := fmt.Errorf("has no lisener")
-		log.Fatal(err)
+		log.Fatal(e.NotFoundError(e.ModelListener, e.Listener))
 	}
-	log.Println("[INFO] start listen :", l.addr)
+	log.Info("start listen :", l.addr)
 	for {
 		conn, err := l.tcpListener.AcceptTCP()
 		if err != nil {
-			if l.closeFlag {
-				return
-			}
 			continue
 		}
-		log.Printf("[INFO] get remote conn: %s -> %s\n", conn.RemoteAddr(), conn.LocalAddr())
+		log.Infof("get remote conn: %s -> %s", conn.RemoteAddr(), conn.LocalAddr())
 		c := NewConn(conn)
 		l.connChan <- c
 	}
@@ -48,7 +53,7 @@ func NewListener(bindAddr string, bindPort int64) (listener *Listener, err error
 		addr:        tcpListener.Addr(),
 		tcpListener: tcpListener,
 		connChan:    make(chan *Conn, 1),
-		closeFlag:   false,
+		ConnList:    utils.NewQueue(),
 	}
 	go listener.StartListen()
 	return listener, nil
@@ -62,6 +67,6 @@ func (l *Listener) GetConn() (conn *Conn, err error) {
 	if !ok {
 		return conn, fmt.Errorf("channel close")
 	}
+	l.ConnList.Push(conn)
 	return conn, nil
 }
-

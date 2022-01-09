@@ -1,20 +1,20 @@
 package main
 
 import (
-	"fmt"
+	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/consts"
+	log "github.com/sirupsen/logrus"
 )
 
 func main() {
-	fmt.Println("--- client start ---")
-
-	var appClientList = []*consts.AppClient{
+	appClientList := []*consts.AppClient{
 		{Name: "SSH", LocalPort: 22},
+		{Name: "HTTP", LocalPort: 7777},
 	}
 
-	proxyClient, err := NewProxyClient("common", 5555, "0.0.0.0", 8888, appClientList)
+	commonProxyClient, err := NewProxyClient("common", 5555, "0.0.0.0", 8888, appClientList)
 	if err != nil {
-		fmt.Println(err)
+		log.Error(errors.ErrorStack(err))
 	}
-	proxyClient.Run()
+	commonProxyClient.Run()
 }

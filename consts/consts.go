@@ -3,8 +3,9 @@ package consts
 import "time"
 
 const (
-	HeartbeatTimeout = 30 * time.Second
-	UserConnTimeout  = 30 * time.Second
+	HeartbeatInterval = 10 * time.Second
+	HeartbeatTimeout  = 30 * time.Second
+	JoinConnTimeout   = 30 * time.Second
 )
 
 type AppServer struct {

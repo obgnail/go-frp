@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/connection"
 	"github.com/obgnail/go-frp/consts"
+	"github.com/obgnail/go-frp/e"
 	"github.com/obgnail/go-frp/utils"
+	log "github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"time"
 )
 
@@ -49,7 +49,7 @@ func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort 
 func (c *ProxyClient) GetLocalConn(localPort int64) (localConn *connection.Conn, err error) {
 	tcpConn, err := utils.Dail("127.0.0.1", localPort)
 	if err != nil {
-		log.Println("[Error] get local conn err", errors.Trace(err))
+		err = errors.Trace(err)
 		return
 	}
 	localConn = connection.NewConn(tcpConn)
@@ -59,7 +59,7 @@ func (c *ProxyClient) GetLocalConn(localPort int64) (localConn *connection.Conn,
 func (c *ProxyClient) GetRemoteConn(remoteAddr string, remotePort int64) (remoteConn *connection.Conn, err error) {
 	tcpConn, err := utils.Dail(remoteAddr, remotePort)
 	if err != nil {
-		log.Println("[Error] get remote conn err", errors.Trace(err))
+		err = errors.Trace(err)
 		return
 	}
 	remoteConn = connection.NewConn(tcpConn)
@@ -69,30 +69,30 @@ func (c *ProxyClient) GetRemoteConn(remoteAddr string, remotePort int64) (remote
 func (c *ProxyClient) getJoinConnsFromMsg(msg *consts.Message) (localConn, remoteConn *connection.Conn, err error) {
 	appProxyName := msg.Content
 	if appProxyName == "" {
-		err = fmt.Errorf("[ERROR] ProxyName [%s], get app name error")
+		err = e.NotFoundError(e.ModelClient, e.App)
 		return
 	}
 
 	appServer, ok := c.onListenAppServers[appProxyName]
 	if !ok {
-		err = fmt.Errorf("[ERROR] ProxyName [%s], has no such app server, %v", appProxyName, errors.Trace(err))
+		err = e.NotFoundError(e.ModelServer, e.App)
 		return
 	}
 	appClient, ok := c.appClientMap[appProxyName]
 	if !ok {
-		err = fmt.Errorf("[ERROR] ProxyName [%s], has no such app client, %v", appProxyName, errors.Trace(err))
+		err = e.NotFoundError(e.ModelClient, e.Client)
 		return
 	}
 
 	remoteConn, err = c.GetRemoteConn(c.RemoteAddr, appServer.ListenPort)
 	if err != nil {
-		err = fmt.Errorf("[ERROR] ProxyName [%s], get remote conn error, %v", c.ProxyName, errors.Trace(err))
+		err = errors.Trace(err)
 		return
 	}
 
 	localConn, err = c.GetLocalConn(appClient.LocalPort)
 	if err != nil {
-		err = fmt.Errorf("[ERROR] ProxyName [%s], get local conn error, %v", c.ProxyName, errors.Trace(err))
+		err = errors.Trace(err)
 		return
 	}
 	return
@@ -101,7 +101,7 @@ func (c *ProxyClient) getJoinConnsFromMsg(msg *consts.Message) (localConn, remot
 func (c *ProxyClient) joinConn(serverConn *connection.Conn, msg *consts.Message) {
 	localConn, remoteConn, err := c.getJoinConnsFromMsg(msg)
 	if err != nil {
-		log.Printf("[ERROR] get join conns from msg. %v", errors.Trace(err))
+		log.Errorf("get join conns from msg.", errors.ErrorStack(errors.Trace(err)))
 		if localConn != nil {
 			localConn.Close()
 		}
@@ -114,35 +114,30 @@ func (c *ProxyClient) joinConn(serverConn *connection.Conn, msg *consts.Message)
 	joinMsg := consts.NewMessage(consts.TypeClientJoin, msg.Content, c.ProxyName, nil)
 	err = remoteConn.SendMessage(joinMsg)
 	if err != nil {
-		log.Printf("[ERROR] ProxyName [%s], write to server error, %v", c.ProxyName, err)
+		log.Errorf(errors.ErrorStack(errors.Trace(err)))
 		return
 	}
 
-	log.Printf("Join two conns, (l[%s] -> r[%s]) (l[%s] -> r[%s])\n",
-		localConn.GetRemoteAddr(),
-		localConn.GetLocalAddr(),
-		remoteConn.GetRemoteAddr(),
-		remoteConn.GetLocalAddr(),
-	)
+	log.Infof("Join two conns, [%s] <====> [%s]", localConn.String(), remoteConn.String())
 	go connection.Join(localConn, remoteConn)
 }
 
 func (c *ProxyClient) sendInitAppMsg(conn *connection.Conn) {
 	if c.appClientMap == nil {
-		log.Fatal("[ERROR] has no app client to proxy")
+		log.Fatal("has no app client to proxy")
 	}
 
 	// 通知server开始监听这些app
 	msg := consts.NewMessage(consts.TypeInitApp, "", c.ProxyName, c.appClientMap)
 	if err := conn.SendMessage(msg); err != nil {
-		log.Println("[WARN] client write init msg err", errors.Trace(err))
+		log.Warn("client write init msg err.", errors.ErrorStack(errors.Trace(err)))
 		return
 	}
 }
 
 func (c *ProxyClient) storeServerApp(conn *connection.Conn, msg *consts.Message) {
 	if msg.Meta == nil {
-		log.Fatal("[ERROR] has no app to proxy")
+		log.Fatal("has no app to proxy")
 	}
 
 	for name, app := range msg.Meta.(map[string]interface{}) {
@@ -161,15 +156,16 @@ func (c *ProxyClient) storeServerApp(conn *connection.Conn, msg *consts.Message)
 		for {
 			select {
 			case <-c.heartbeatChan:
-				log.Println("[INFO] received heartbeat msg from", conn.GetRemoteAddr())
-				time.Sleep(10 * time.Second)
+				log.Debug("received heartbeat msg from", conn.GetRemoteAddr())
+				time.Sleep(consts.HeartbeatInterval)
 				resp := consts.NewMessage(consts.TypeClientHeartbeat, "", c.ProxyName, nil)
 				err := conn.SendMessage(resp)
 				if err != nil {
-					log.Println("[WARN] server write heartbeat err", errors.Trace(err))
+					log.Warn(e.SendHeartbeatMessageError())
+					log.Warn(errors.ErrorStack(errors.Trace(err)))
 				}
 			case <-time.After(consts.HeartbeatTimeout):
-				log.Println("[WARN] Heartbeat timeout!")
+				log.Warn("Heartbeat timeout!")
 				if conn != nil {
 					conn.Close()
 				}
@@ -181,7 +177,7 @@ func (c *ProxyClient) storeServerApp(conn *connection.Conn, msg *consts.Message)
 func (c *ProxyClient) Run() {
 	conn, ok := <-c.connChan
 	if !ok {
-		log.Fatal("[Error] has no conn")
+		log.Fatal("has no conn")
 	}
 
 	c.sendInitAppMsg(conn)
@@ -189,9 +185,9 @@ func (c *ProxyClient) Run() {
 	for {
 		msg, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("[WARN] proxy client read err:", errors.Trace(err))
+			log.Warn(errors.ErrorStack(errors.Trace(err)))
 			if err == io.EOF {
-				log.Printf("ProxyName [%s], server is dead!\n", c.ProxyName)
+				log.Infof("ProxyName [%s], client is dead!", c.ProxyName)
 				return
 			}
 			continue
