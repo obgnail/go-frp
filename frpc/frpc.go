@@ -118,7 +118,7 @@ func (c *ProxyClient) joinConn(serverConn *connection.Conn, msg *consts.Message)
 		return
 	}
 
-	log.Infof("Join two conns, [%s] <====> [%s]", localConn.String(), remoteConn.String())
+	log.Infof("Join two connections, [%s] <====> [%s]", localConn.String(), remoteConn.String())
 	go connection.Join(localConn, remoteConn)
 }
 

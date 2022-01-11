@@ -193,7 +193,7 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 
 			waitToJoinClientConn := conn
 			waitToJoinUserConn := newClientConn.(*connection.Conn)
-			log.Infof("Join two conns, [%s] <====> [%s]", waitToJoinUserConn.String(), waitToJoinClientConn.String())
+			log.Infof("Join two connections, [%s] <====> [%s]", waitToJoinUserConn.String(), waitToJoinClientConn.String())
 			go connection.Join(waitToJoinUserConn, waitToJoinClientConn)
 			appProxyServer.SetStatus(Work)
 
