@@ -8,6 +8,21 @@
 
 Server：
 
+```go
+func main() {
+	appServerList := []*consts.AppServer{
+    {Name: "SSH", ListenPort: 6000, Password: "my_ssh_server_password"},
+		{Name: "HTTP", ListenPort: 5000, Password: ""},
+	}
+
+	commonProxyServer, err := NewProxyServer("common", "0.0.0.0", 8888, appServerList)
+	if err != nil {
+		log.Error(errors.ErrorStack(err))
+	}
+	commonProxyServer.Run()
+}
+```
+
 ```bash
 cd frps/
 go run *.go
@@ -16,6 +31,21 @@ go run *.go
 
 
 Client：
+
+```go
+func main() {
+	appClientList := []*consts.AppClient{
+		{Name: "SSH", LocalPort: 22, Password: "my_ssh_server_password"},
+		{Name: "HTTP", LocalPort: 7777, Password: ""},
+	}
+
+	commonProxyClient, err := NewProxyClient("common", 5555, "0.0.0.0", 8888, appClientList)
+	if err != nil {
+		log.Error(errors.ErrorStack(err))
+	}
+	commonProxyClient.Run()
+}
+```
 
 ```bash
 cd frpc/
