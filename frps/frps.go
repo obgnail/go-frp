@@ -136,7 +136,7 @@ func (s *ProxyServer) initApp(clientConn *connection.Conn, msg *consts.Message) 
 					return
 				}
 			case <-time.After(consts.HeartbeatTimeout):
-				log.Warn("Heartbeat timeout!")
+				log.Warnf("ProxyName [%s], user conn [%s] Heartbeat timeout", s.Name, clientConn.GetRemoteAddr())
 				if clientConn != nil {
 					s.CloseClient(clientConn)
 				}
@@ -206,7 +206,7 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 					return
 				}
 				if conn == uc.(*connection.Conn) {
-					log.Warn("ProxyName [%s], user conn [%s] timeout", s.Name, conn.GetRemoteAddr())
+					log.Warnf("ProxyName [%s], user conn [%s], join conns timeout", s.Name, conn.GetRemoteAddr())
 				}
 				appProxyServer.SetStatus(Idle)
 			})
