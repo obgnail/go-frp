@@ -101,7 +101,7 @@ func (c *ProxyClient) getJoinConnsFromMsg(msg *consts.Message) (localConn, remot
 func (c *ProxyClient) joinConn(serverConn *connection.Conn, msg *consts.Message) {
 	localConn, remoteConn, err := c.getJoinConnsFromMsg(msg)
 	if err != nil {
-		log.Errorf("get join conns from msg.", errors.ErrorStack(errors.Trace(err)))
+		log.Warnf("get join connections from msg.", errors.ErrorStack(errors.Trace(err)))
 		if localConn != nil {
 			localConn.Close()
 		}
@@ -165,7 +165,7 @@ func (c *ProxyClient) storeServerApp(conn *connection.Conn, msg *consts.Message)
 					log.Warn(errors.ErrorStack(errors.Trace(err)))
 				}
 			case <-time.After(consts.HeartbeatTimeout):
-				log.Warnf("ProxyName [%s], user conn [%s] Heartbeat timeout", c.ProxyName, conn.GetRemoteAddr())
+				log.Errorf("ProxyName [%s], user conn [%s] Heartbeat timeout", c.ProxyName, conn.GetRemoteAddr())
 				if conn != nil {
 					conn.Close()
 				}

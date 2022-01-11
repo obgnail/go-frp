@@ -136,7 +136,7 @@ func (s *ProxyServer) initApp(clientConn *connection.Conn, msg *consts.Message) 
 					return
 				}
 			case <-time.After(consts.HeartbeatTimeout):
-				log.Warnf("ProxyName [%s], user conn [%s] Heartbeat timeout", s.Name, clientConn.GetRemoteAddr())
+				log.Errorf("ProxyName [%s], user conn [%s] Heartbeat timeout", s.Name, clientConn.GetRemoteAddr())
 				if clientConn != nil {
 					s.CloseClient(clientConn)
 				}
@@ -172,7 +172,7 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 			if err != nil {
 				log.Warnf("proxy client read err:", errors.Trace(err))
 				if err == io.EOF {
-					log.Warnf("ProxyName [%s], server is dead!", appProxyServer.Name)
+					log.Errorf("ProxyName [%s], server is dead!", appProxyServer.Name)
 					s.CloseClient(conn)
 					return
 				}
@@ -206,7 +206,8 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 					return
 				}
 				if conn == uc.(*connection.Conn) {
-					log.Warnf("ProxyName [%s], user conn [%s], join conns timeout", s.Name, conn.GetRemoteAddr())
+					log.Errorf("ProxyName [%s], user conn [%s], join connections timeout", s.Name, conn.GetRemoteAddr())
+					conn.Close()
 				}
 				appProxyServer.SetStatus(Idle)
 			})
