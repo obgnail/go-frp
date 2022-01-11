@@ -50,7 +50,7 @@ func NewProxyServer(name, bindAddr string, listenPort int64, appProxyList []*con
 		appServerMap:       appServerMap,
 		status:             Idle,
 		listener:           tcpListener,
-		onListenAppServers: make(map[string]*ProxyServer),
+		onListenAppServers: make(map[string]*ProxyServer, len(appProxyList)),
 		heartbeatChan:      make(chan *consts.Message, 1),
 	}
 	return ps, nil
