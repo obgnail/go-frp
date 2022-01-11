@@ -106,7 +106,7 @@ func (c *ProxyClient) joinConn(serverConn *connection.Conn, msg *consts.Message)
 			localConn.Close()
 		}
 		if remoteConn != nil {
-			localConn.Close()
+			remoteConn.Close()
 		}
 		return
 	}
