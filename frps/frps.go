@@ -70,6 +70,9 @@ func (s *ProxyServer) CloseClient(clientConn *connection.Conn) {
 	for _, app := range s.onListenAppServers {
 		app.listener.Close()
 	}
+
+	// clear all
+	s.onListenAppServers = make(map[string]*ProxyServer, len(s.onListenAppServers))
 }
 
 func (s *ProxyServer) checkApp(msg *consts.Message) (map[string]*consts.AppServer, error) {

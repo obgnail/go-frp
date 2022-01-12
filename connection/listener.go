@@ -7,6 +7,7 @@ import (
 	"github.com/obgnail/go-frp/utils"
 	log "github.com/sirupsen/logrus"
 	"net"
+	"sync"
 )
 
 type Listener struct {
@@ -14,9 +15,14 @@ type Listener struct {
 	tcpListener *net.TCPListener
 	connChan    chan *Conn
 	ConnList    *utils.Queue
+	once        sync.Once
 }
 
 func (l *Listener) Close() {
+	l.once.Do(l.close)
+}
+
+func (l *Listener) close() {
 	for l.ConnList.Len() != 0 {
 		if c := l.ConnList.Pop(); c != nil {
 			if conn := c.(*Conn); !conn.IsClosed() {
