@@ -19,15 +19,10 @@ type ProxyClient struct {
 	appInfoMap map[string]*consts.AppInfo
 
 	onListenAppsInfo map[string]*consts.AppServerInfo
-	connChan         chan *connection.Conn
 	heartbeatChan    chan *consts.Message // when get heartbeat msg, put msg in
 }
 
 func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort int64, apps []*consts.AppInfo) (*ProxyClient, error) {
-	tcpConn, err := utils.Dail(remoteAddr, remotePort)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
 	appInfoMap := make(map[string]*consts.AppInfo)
 	for _, app := range apps {
 		appInfoMap[app.Name] = app
@@ -37,12 +32,10 @@ func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort 
 		LocalPort:        localPort,
 		RemoteAddr:       remoteAddr,
 		RemotePort:       remotePort,
-		connChan:         make(chan *connection.Conn, 1),
 		heartbeatChan:    make(chan *consts.Message, 1),
 		onListenAppsInfo: make(map[string]*consts.AppServerInfo),
 		appInfoMap:       appInfoMap,
 	}
-	pc.connChan <- connection.NewConn(tcpConn)
 	return pc, nil
 }
 
@@ -181,11 +174,11 @@ func (c *ProxyClient) storeServerApp(conn *connection.Conn, msg *consts.Message)
 }
 
 func (c *ProxyClient) Run() {
-	conn, ok := <-c.connChan
-	if !ok {
-		log.Fatal("has no conn")
+	tcpConn, err := utils.Dail(c.RemoteAddr, c.RemotePort)
+	if err != nil {
+		log.Fatal(err)
 	}
-
+	conn := connection.NewConn(tcpConn)
 	c.sendInitAppMsg(conn)
 
 	for {
