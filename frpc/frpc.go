@@ -12,13 +12,13 @@ import (
 )
 
 type ProxyClient struct {
-	ProxyName        string
-	LocalPort        int64
-	RemoteAddr       string
-	RemotePort       int64
-	appInfoMap       map[string]*consts.AppClientInfo
-	onListenAppsInfo map[string]*consts.AppServerInfo
-	heartbeatChan    chan *consts.Message // when get heartbeat msg, put msg in
+	ProxyName         string
+	LocalPort         int64
+	RemoteAddr        string
+	RemotePort        int64
+	wantProxyAppsInfo map[string]*consts.AppClientInfo
+	onListenAppsInfo  map[string]*consts.AppServerInfo
+	heartbeatChan     chan *consts.Message // when get heartbeat msg, put msg in
 }
 
 func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort int64, apps []*consts.AppClientInfo) *ProxyClient {
@@ -27,13 +27,13 @@ func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort 
 		appInfoMap[app.Name] = app
 	}
 	pc := &ProxyClient{
-		ProxyName:        name,
-		LocalPort:        localPort,
-		RemoteAddr:       remoteAddr,
-		RemotePort:       remotePort,
-		heartbeatChan:    make(chan *consts.Message, 1),
-		onListenAppsInfo: make(map[string]*consts.AppServerInfo),
-		appInfoMap:       appInfoMap,
+		ProxyName:         name,
+		LocalPort:         localPort,
+		RemoteAddr:        remoteAddr,
+		RemotePort:        remotePort,
+		heartbeatChan:     make(chan *consts.Message, 1),
+		onListenAppsInfo:  make(map[string]*consts.AppServerInfo),
+		wantProxyAppsInfo: appInfoMap,
 	}
 	return pc
 }
@@ -70,7 +70,7 @@ func (c *ProxyClient) getJoinConnsFromMsg(msg *consts.Message) (localConn, remot
 		err = e.NotFoundError(e.ModelServer, e.App)
 		return
 	}
-	appClient, ok := c.appInfoMap[appProxyName]
+	appClient, ok := c.wantProxyAppsInfo[appProxyName]
 	if !ok {
 		err = e.NotFoundError(e.ModelClient, e.Client)
 		return
@@ -115,12 +115,12 @@ func (c *ProxyClient) joinConn(serverConn *connection.Conn, msg *consts.Message)
 }
 
 func (c *ProxyClient) sendInitAppMsg(conn *connection.Conn) {
-	if c.appInfoMap == nil {
+	if c.wantProxyAppsInfo == nil {
 		log.Fatal("has no app client to proxy")
 	}
 
 	// 通知server开始监听这些app
-	msg := consts.NewMessage(consts.TypeInitApp, "", c.ProxyName, c.appInfoMap)
+	msg := consts.NewMessage(consts.TypeInitApp, "", c.ProxyName, c.wantProxyAppsInfo)
 	if err := conn.SendMessage(msg); err != nil {
 		log.Warn("client write init msg err.", errors.ErrorStack(errors.Trace(err)))
 		return
