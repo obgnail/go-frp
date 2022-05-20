@@ -8,13 +8,13 @@ const (
 	JoinConnTimeout   = 30 * time.Second
 )
 
-type AppServer struct {
+type AppServerInfo struct {
 	Name       string
 	ListenPort int64
 	Password   string
 }
 
-type AppClient struct {
+type AppInfo struct {
 	Name      string
 	LocalPort int64
 	Password  string

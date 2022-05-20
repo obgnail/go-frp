@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	appClientList := []*consts.AppClient{
+	appClientList := []*consts.AppInfo{
 		{Name: "SSH", LocalPort: 22, Password: ""},
 		{Name: "HTTP", LocalPort: 7777, Password: ""},
 	}

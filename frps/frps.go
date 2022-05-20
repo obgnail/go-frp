@@ -22,36 +22,36 @@ const (
 // commonServer: Used to establish connection and keep heartbeat。
 // appServer(appProxyServer): Used to proxy data
 type ProxyServer struct {
-	Name         string
-	bindAddr     string
-	listenPort   int64
-	appServerMap map[string]*consts.AppServer
+	Name       string
+	bindAddr   string
+	listenPort int64
+	appInfoMap map[string]*consts.AppServerInfo
 
 	listener              *connection.Listener
 	status                ServerStatus            // used in appServer only
 	waitToJoinUserConnMap sync.Map                // map[appServerName]UserConn, used in appServer only
-	onListenAppServers    map[string]*ProxyServer // appServer which is listening its own port, used in commonServer only
+	onListenApps          map[string]*ProxyServer // appServer which is listening its own port, used in commonServer only
 	heartbeatChan         chan *consts.Message    // when get heartbeat msg, put msg in, used in commonServer only
 }
 
-func NewProxyServer(name, bindAddr string, listenPort int64, appProxyList []*consts.AppServer) (*ProxyServer, error) {
-	tcpListener, err := connection.NewListener(bindAddr, listenPort)
+func NewProxyServer(name, bindAddr string, listenPort int64, apps []*consts.AppServerInfo) (*ProxyServer, error) {
+	listener, err := connection.NewListener(bindAddr, listenPort)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	appServerMap := make(map[string]*consts.AppServer, len(appProxyList))
-	for _, app := range appProxyList {
-		appServerMap[app.Name] = app
+	appInfoMap := make(map[string]*consts.AppServerInfo, len(apps))
+	for _, app := range apps {
+		appInfoMap[app.Name] = app
 	}
 	ps := &ProxyServer{
-		Name:               name,
-		bindAddr:           bindAddr,
-		listenPort:         listenPort,
-		appServerMap:       appServerMap,
-		status:             Idle,
-		listener:           tcpListener,
-		onListenAppServers: make(map[string]*ProxyServer, len(appProxyList)),
-		heartbeatChan:      make(chan *consts.Message, 1),
+		Name:          name,
+		bindAddr:      bindAddr,
+		listenPort:    listenPort,
+		appInfoMap:    appInfoMap,
+		status:        Idle,
+		listener:      listener,
+		onListenApps:  make(map[string]*ProxyServer, len(apps)),
+		heartbeatChan: make(chan *consts.Message, 1),
 	}
 	return ps, nil
 }
@@ -67,30 +67,30 @@ func (s *ProxyServer) GetStatus() ServerStatus {
 func (s *ProxyServer) CloseClient(clientConn *connection.Conn) {
 	log.Info("close conn: ", clientConn.String())
 	clientConn.Close()
-	for _, app := range s.onListenAppServers {
+	for _, app := range s.onListenApps {
 		app.listener.Close()
 	}
 
 	// clear all
-	s.onListenAppServers = make(map[string]*ProxyServer, len(s.onListenAppServers))
+	s.onListenApps = make(map[string]*ProxyServer, len(s.onListenApps))
 }
 
-func (s *ProxyServer) checkApp(msg *consts.Message) (map[string]*consts.AppServer, error) {
+func (s *ProxyServer) checkApp(msg *consts.Message) (map[string]*consts.AppServerInfo, error) {
 	if msg.Meta == nil {
 		return nil, e.EmptyError(e.ModelMessage, e.Meta)
 	}
-	wantProxyApps := make(map[string]*consts.AppClient)
+	wantProxyApps := make(map[string]*consts.AppInfo)
 	for name, app := range msg.Meta.(map[string]interface{}) {
 		a := app.(map[string]interface{})
-		wantProxyApps[name] = &consts.AppClient{
+		wantProxyApps[name] = &consts.AppInfo{
 			Name:      a["Name"].(string),
 			LocalPort: int64(a["LocalPort"].(float64)),
 			Password:  a["Password"].(string),
 		}
 	}
-	waitToListenAppServers := make(map[string]*consts.AppServer)
+	waitToListenAppsInfo := make(map[string]*consts.AppServerInfo)
 	for _, appClient := range wantProxyApps {
-		appServer, ok := s.appServerMap[appClient.Name]
+		appServer, ok := s.appInfoMap[appClient.Name]
 		if !ok {
 			return nil, e.NotFoundError(e.ModelServer, e.App)
 		}
@@ -102,13 +102,13 @@ func (s *ProxyServer) checkApp(msg *consts.Message) (map[string]*consts.AppServe
 			return nil, errors.Trace(err)
 		}
 		appServer.ListenPort = int64(port)
-		waitToListenAppServers[appClient.Name] = appServer
+		waitToListenAppsInfo[appClient.Name] = appServer
 	}
-	return waitToListenAppServers, nil
+	return waitToListenAppsInfo, nil
 }
 
 func (s *ProxyServer) initApp(clientConn *connection.Conn, msg *consts.Message) {
-	waitToListenAppServers, err := s.checkApp(msg)
+	waitToListenAppsInfo, err := s.checkApp(msg)
 	if err != nil {
 		err = errors.Trace(err)
 		log.Error(errors.ErrorStack(err))
@@ -117,12 +117,12 @@ func (s *ProxyServer) initApp(clientConn *connection.Conn, msg *consts.Message) 
 	}
 
 	// 开始代理具体服务
-	for _, app := range waitToListenAppServers {
+	for _, app := range waitToListenAppsInfo {
 		go s.startProxyApp(clientConn, app)
 	}
 
 	// 告知client这些App可以进行代理
-	resp := consts.NewMessage(consts.TypeAppMsg, "", s.Name, waitToListenAppServers)
+	resp := consts.NewMessage(consts.TypeAppMsg, "", s.Name, waitToListenAppsInfo)
 	err = clientConn.SendMessage(resp)
 	if err != nil {
 		log.Error(errors.ErrorStack(errors.Trace(err)))
@@ -154,20 +154,20 @@ func (s *ProxyServer) initApp(clientConn *connection.Conn, msg *consts.Message) 
 	}()
 }
 
-func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.AppServer) {
-	if ps, ok := s.onListenAppServers[app.Name]; ok {
+func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.AppServerInfo) {
+	if ps, ok := s.onListenApps[app.Name]; ok {
 		ps.listener.Close()
 	}
 
-	appProxyServer, err := NewProxyServer(app.Name, s.bindAddr, app.ListenPort, nil)
+	apps, err := NewProxyServer(app.Name, s.bindAddr, app.ListenPort, nil)
 	if err != nil {
 		log.Error(errors.ErrorStack(errors.Trace(err)))
 		return
 	}
-	s.onListenAppServers[app.Name] = appProxyServer
+	s.onListenApps[app.Name] = apps
 
 	for {
-		conn, err := appProxyServer.listener.GetConn()
+		conn, err := apps.listener.GetConn()
 		if err != nil {
 			log.Error(errors.ErrorStack(errors.Trace(err)))
 			return
@@ -175,12 +175,12 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 		log.Info("user connect success:", conn.String())
 
 		// connection from client
-		if appProxyServer.GetStatus() == Ready && conn.GetRemoteIP() == clientConn.GetRemoteIP() {
+		if apps.GetStatus() == Ready && conn.GetRemoteIP() == clientConn.GetRemoteIP() {
 			msg, err := conn.ReadMessage()
 			if err != nil {
 				log.Warnf("proxy client read err:", errors.Trace(err))
 				if err == io.EOF {
-					log.Errorf("ProxyName [%s], server is dead!", appProxyServer.Name)
+					log.Errorf("ProxyName [%s], server is dead!", apps.Name)
 					s.CloseClient(conn)
 					return
 				}
@@ -203,7 +203,7 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 			waitToJoinUserConn := newClientConn.(*connection.Conn)
 			log.Infof("Join two connections, [%s] <====> [%s]", waitToJoinUserConn.String(), waitToJoinClientConn.String())
 			go connection.Join(waitToJoinUserConn, waitToJoinClientConn)
-			appProxyServer.SetStatus(Work)
+			apps.SetStatus(Work)
 
 			// connection from user
 		} else {
@@ -217,7 +217,7 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 					log.Errorf("ProxyName [%s], user conn [%s], join connections timeout", s.Name, conn.GetRemoteAddr())
 					conn.Close()
 				}
-				appProxyServer.SetStatus(Idle)
+				apps.SetStatus(Idle)
 			})
 
 			// 通知client, Dial到此端口
@@ -227,7 +227,7 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 				log.Warn(errors.ErrorStack(errors.Trace(err)))
 				return
 			}
-			appProxyServer.SetStatus(Ready)
+			apps.SetStatus(Ready)
 		}
 	}
 }

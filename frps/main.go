@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	appServerList := []*consts.AppServer{
+	appServerList := []*consts.AppServerInfo{
 		{Name: "SSH", Password: ""},
 		{Name: "HTTP", Password: ""},
 	}
