@@ -10,16 +10,19 @@ Server：
 
 ```go
 func main() {
-	appServerList := []*consts.AppServer{
-    {Name: "SSH", ListenPort: 6000, Password: "my_ssh_server_password"},
-		{Name: "HTTP", ListenPort: 5000, Password: ""},
-	}
-
-	commonProxyServer, err := NewProxyServer("common", "0.0.0.0", 8888, appServerList)
+	commonProxyServer, err := NewProxyServer(
+		"common",
+		"0.0.0.0",
+		8888,
+		[]*consts.AppServerInfo{
+			{Name: "SSH", Password: ""},
+			{Name: "HTTP", Password: ""},
+		},
+	)
 	if err != nil {
 		log.Error(errors.ErrorStack(err))
 	}
-	commonProxyServer.Run()
+	commonProxyServer.Serve()
 }
 ```
 
@@ -34,16 +37,16 @@ Client：
 
 ```go
 func main() {
-	appClientList := []*consts.AppClient{
-		{Name: "SSH", LocalPort: 22, Password: "my_ssh_server_password"},
-		{Name: "HTTP", LocalPort: 7777, Password: ""},
-	}
-
-	commonProxyClient, err := NewProxyClient("common", 5555, "0.0.0.0", 8888, appClientList)
-	if err != nil {
-		log.Error(errors.ErrorStack(err))
-	}
-	commonProxyClient.Run()
+	NewProxyClient(
+		"common",
+		5555,
+		"127.0.0.1",
+		8888,
+		[]*consts.AppClientInfo{
+			{Name: "SSH", LocalPort: 22, Password: ""},
+			{Name: "HTTP", LocalPort: 7777, Password: ""},
+		},
+	).Run()
 }
 ```
 
