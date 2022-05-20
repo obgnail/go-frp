@@ -10,7 +10,7 @@ func main() {
 		5555,
 		"127.0.0.1",
 		8888,
-		[]*consts.AppClientInfo{
+		[]*consts.AppInfo{
 			{Name: "SSH", LocalPort: 22, Password: ""},
 			{Name: "HTTP", LocalPort: 7777, Password: ""},
 		},

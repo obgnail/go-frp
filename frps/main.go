@@ -11,7 +11,7 @@ func main() {
 		"common",
 		"0.0.0.0",
 		8888,
-		[]*consts.AppServerInfo{
+		[]*consts.AppInfo{
 			{Name: "SSH", Password: ""},
 			{Name: "HTTP", Password: ""},
 		},
