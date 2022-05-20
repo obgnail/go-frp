@@ -14,7 +14,7 @@ func main() {
 		"common",
 		"0.0.0.0",
 		8888,
-		[]*consts.AppServerInfo{
+		[]*consts.AppInfo{
 			{Name: "SSH", Password: ""},
 			{Name: "HTTP", Password: ""},
 		},
@@ -42,7 +42,7 @@ func main() {
 		5555,
 		"127.0.0.1",
 		8888,
-		[]*consts.AppClientInfo{
+		[]*consts.AppInfo{
 			{Name: "SSH", LocalPort: 22, Password: ""},
 			{Name: "HTTP", LocalPort: 7777, Password: ""},
 		},
