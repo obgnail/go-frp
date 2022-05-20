@@ -232,7 +232,6 @@ func (s *ProxyServer) startProxyApp(clientConn *connection.Conn, app *consts.App
 	}
 }
 
-// 所有连接发送的控制数据都会到此函数处理
 func (s *ProxyServer) process(clientConn *connection.Conn) {
 	for {
 		msg, err := clientConn.ReadMessage()
