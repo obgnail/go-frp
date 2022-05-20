@@ -148,6 +148,12 @@ func (c *ProxyClient) storeServerApp(conn *connection.Conn, msg *consts.Message)
 		}
 	}
 
+	log.Info("---------- Sever ----------")
+	for name, app := range c.onListenAppServers {
+		log.Infof("[%s]:\t%s:%d", name, conn.GetRemoteIP(), app.ListenPort)
+	}
+	log.Info("---------------------------")
+
 	// prepared, start first heartbeat
 	c.heartbeatChan <- msg
 

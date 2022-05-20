@@ -97,6 +97,11 @@ func (s *ProxyServer) checkApp(msg *consts.Message) (map[string]*consts.AppServe
 		if appClient.Password != appServer.Password {
 			return nil, e.InvalidPasswordError(appClient.Name)
 		}
+		port, err := connection.TryGetFreePort(5)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		appServer.ListenPort = int64(port)
 		waitToListenAppServers[appClient.Name] = appServer
 	}
 	return waitToListenAppServers, nil

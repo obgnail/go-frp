@@ -132,3 +132,45 @@ func Join(c1 *Conn, c2 *Conn) {
 	wait.Wait()
 	return
 }
+
+func GetFreePort() (int, error) {
+	addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
+	if err != nil {
+		return 0, err
+	}
+
+	l, err := net.ListenTCP("tcp", addr)
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+func TryGetFreePort(try int) (int, error) {
+	for count := 0; count != try; count++ {
+		port, err := GetFreePort()
+		if err != nil {
+			continue
+		}
+		return port, nil
+	}
+	return 0, fmt.Errorf("try too much time")
+}
+
+func GetFreePorts(count int) (ports []int, err error) {
+	maxFailCount := 5
+	failCount := 0
+	for failCount != maxFailCount || len(ports) != count {
+		port, err := GetFreePort()
+		if err != nil {
+			failCount++
+			continue
+		}
+		ports = append(ports, port)
+	}
+	if failCount == 5 {
+		return nil, fmt.Errorf("get free port err")
+	}
+	return ports, nil
+}
