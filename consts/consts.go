@@ -14,7 +14,7 @@ type AppServerInfo struct {
 	Password   string
 }
 
-type AppInfo struct {
+type AppClientInfo struct {
 	Name      string
 	LocalPort int64
 	Password  string

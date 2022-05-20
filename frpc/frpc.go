@@ -12,18 +12,17 @@ import (
 )
 
 type ProxyClient struct {
-	ProxyName  string
-	LocalPort  int64
-	RemoteAddr string
-	RemotePort int64
-	appInfoMap map[string]*consts.AppInfo
-
+	ProxyName        string
+	LocalPort        int64
+	RemoteAddr       string
+	RemotePort       int64
+	appInfoMap       map[string]*consts.AppClientInfo
 	onListenAppsInfo map[string]*consts.AppServerInfo
 	heartbeatChan    chan *consts.Message // when get heartbeat msg, put msg in
 }
 
-func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort int64, apps []*consts.AppInfo) (*ProxyClient, error) {
-	appInfoMap := make(map[string]*consts.AppInfo)
+func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort int64, apps []*consts.AppClientInfo) *ProxyClient {
+	appInfoMap := make(map[string]*consts.AppClientInfo)
 	for _, app := range apps {
 		appInfoMap[app.Name] = app
 	}
@@ -36,7 +35,7 @@ func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort 
 		onListenAppsInfo: make(map[string]*consts.AppServerInfo),
 		appInfoMap:       appInfoMap,
 	}
-	return pc, nil
+	return pc
 }
 
 func (c *ProxyClient) GetLocalConn(localPort int64) (localConn *connection.Conn, err error) {
@@ -179,8 +178,8 @@ func (c *ProxyClient) Run() {
 		log.Fatal(err)
 	}
 	conn := connection.NewConn(tcpConn)
-	c.sendInitAppMsg(conn)
 
+	c.sendInitAppMsg(conn)
 	for {
 		msg, err := conn.ReadMessage()
 		if err != nil {

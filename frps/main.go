@@ -7,14 +7,17 @@ import (
 )
 
 func main() {
-	appServerList := []*consts.AppServerInfo{
-		{Name: "SSH", Password: ""},
-		{Name: "HTTP", Password: ""},
-	}
-
-	commonProxyServer, err := NewProxyServer("common", "0.0.0.0", 8888, appServerList)
+	commonProxyServer, err := NewProxyServer(
+		"common",
+		"0.0.0.0",
+		8888,
+		[]*consts.AppServerInfo{
+			{Name: "SSH", Password: ""},
+			{Name: "HTTP", Password: ""},
+		},
+	)
 	if err != nil {
 		log.Error(errors.ErrorStack(err))
 	}
-	commonProxyServer.Run()
+	commonProxyServer.Serve()
 }

@@ -79,10 +79,10 @@ func (s *ProxyServer) checkApp(msg *consts.Message) (map[string]*consts.AppServe
 	if msg.Meta == nil {
 		return nil, e.EmptyError(e.ModelMessage, e.Meta)
 	}
-	wantProxyApps := make(map[string]*consts.AppInfo)
+	wantProxyApps := make(map[string]*consts.AppClientInfo)
 	for name, app := range msg.Meta.(map[string]interface{}) {
 		a := app.(map[string]interface{})
-		wantProxyApps[name] = &consts.AppInfo{
+		wantProxyApps[name] = &consts.AppClientInfo{
 			Name:      a["Name"].(string),
 			LocalPort: int64(a["LocalPort"].(float64)),
 			Password:  a["Password"].(string),
@@ -253,7 +253,7 @@ func (s *ProxyServer) process(clientConn *connection.Conn) {
 	}
 }
 
-func (s *ProxyServer) Run() {
+func (s *ProxyServer) Serve() {
 	if s == nil {
 		err := e.EmptyError(e.ModelServer, e.Server)
 		log.Fatal(err)
