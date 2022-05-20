@@ -8,6 +8,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/obgnail/go-frp/consts"
 	"github.com/obgnail/go-frp/e"
+	"github.com/obgnail/go-frp/utils"
 	log "github.com/sirupsen/logrus"
 	"io"
 	"net"
@@ -173,4 +174,14 @@ func GetFreePorts(count int) (ports []int, err error) {
 		return nil, fmt.Errorf("get free port err")
 	}
 	return ports, nil
+}
+
+func Dial(remoteAddr string, remotePort int64) (remoteConn *Conn, err error) {
+	tcpConn, err := utils.Dail(remoteAddr, remotePort)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+	remoteConn = NewConn(tcpConn)
+	return
 }

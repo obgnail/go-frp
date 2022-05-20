@@ -38,33 +38,12 @@ func NewProxyClient(name string, localPort int64, remoteAddr string, remotePort 
 	return pc
 }
 
-func (c *ProxyClient) GetLocalConn(localPort int64) (localConn *connection.Conn, err error) {
-	tcpConn, err := utils.Dail("127.0.0.1", localPort)
-	if err != nil {
-		err = errors.Trace(err)
-		return
-	}
-	localConn = connection.NewConn(tcpConn)
-	return
-}
-
-func (c *ProxyClient) GetRemoteConn(remoteAddr string, remotePort int64) (remoteConn *connection.Conn, err error) {
-	tcpConn, err := utils.Dail(remoteAddr, remotePort)
-	if err != nil {
-		err = errors.Trace(err)
-		return
-	}
-	remoteConn = connection.NewConn(tcpConn)
-	return
-}
-
 func (c *ProxyClient) getJoinConnsFromMsg(msg *consts.Message) (localConn, remoteConn *connection.Conn, err error) {
 	appProxyName := msg.Content
 	if appProxyName == "" {
 		err = e.NotFoundError(e.ModelClient, e.App)
 		return
 	}
-
 	appServer, ok := c.onProxyApps[appProxyName]
 	if !ok {
 		err = e.NotFoundError(e.ModelServer, e.App)
@@ -76,13 +55,13 @@ func (c *ProxyClient) getJoinConnsFromMsg(msg *consts.Message) (localConn, remot
 		return
 	}
 
-	localConn, err = c.GetLocalConn(appClient.LocalPort)
+	localConn, err = connection.Dial("127.0.0.1", appClient.LocalPort)
 	if err != nil {
 		err = errors.Trace(err)
 		return
 	}
 
-	remoteConn, err = c.GetRemoteConn(c.RemoteAddr, appServer.ListenPort)
+	remoteConn, err = connection.Dial(c.RemoteAddr, appServer.ListenPort)
 	if err != nil {
 		err = errors.Trace(err)
 		return

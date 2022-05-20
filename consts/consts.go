@@ -14,9 +14,3 @@ type AppInfo struct {
 	LocalPort  int64 // used in local
 	Password   string
 }
-
-//type AppClientInfo struct {
-//	Name      string
-//	LocalPort int64
-//	Password  string
-//}
